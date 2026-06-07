@@ -1,0 +1,39 @@
+{
+    "projectname": "perso-douyin-minigame",
+    "appid": "tt736505d8ed01f3a902",
+    "compileType": "game",
+    "setting": {
+        "urlCheck": false,
+        "es6": true,
+        "postcss": false,
+        "minified": false,
+        "newFeature": true
+    },
+    "condition": {
+        "game": {
+            "current": -1,
+            "list": [
+                {
+                    "id": 1780787107141,
+                    "name": "Perso 人格圆桌：30岁了还在迷茫怎么办？",
+                    "pathName": "Perso 人格圆桌：30岁了还在迷茫怎么办？",
+                    "query": "",
+                    "scene": "",
+                    "launchFrom": "",
+                    "location": "",
+                    "mockUpdateType": "Noupdate"
+                },
+                {
+                    "id": 1780787360727,
+                    "name": "新分享",
+                    "pathName": "新分享",
+                    "query": "",
+                    "scene": "",
+                    "launchFrom": "",
+                    "location": "",
+                    "mockUpdateType": "Noupdate"
+                }
+            ]
+        }
+    }
+}

@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800mm" height="2000mm" viewBox="0 0 800 2000">
+  <defs>
+    <pattern id="boardDots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="5" cy="5" r="1.4" fill="#111111" opacity="0.18"/>
+    </pattern>
+    <filter id="hardShadow" x="-20%" y="-20%" width="160%" height="160%">
+      <feDropShadow dx="9" dy="11" stdDeviation="0" flood-color="#111111" flood-opacity="1"/>
+    </filter>
+    <style>
+      .cn { font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; letter-spacing: 0; }
+      .en { font-family: "Arial Black", "Impact", "PingFang SC", sans-serif; letter-spacing: 0; }
+      .brand { font-size: 118px; font-weight: 950; fill: #111111; }
+      .hero { font-size: 58px; font-weight: 950; fill: #111111; }
+      .h2 { font-size: 42px; font-weight: 950; fill: #111111; }
+      .h3 { font-size: 30px; font-weight: 950; fill: #111111; }
+      .body { font-size: 23px; font-weight: 760; fill: #111111; }
+      .small { font-size: 18px; font-weight: 760; fill: #111111; }
+      .tiny { font-size: 14px; font-weight: 760; fill: #111111; }
+      .white { fill: #FFFFFF; }
+      .lime { fill: #B1FD00; }
+      .yellow { fill: #FFC700; }
+      .cyan { fill: #A3F8FF; }
+      .blue { fill: #5B5CF3; }
+      .purple { fill: #8046F5; }
+      .muted { fill: #D3D1D1; }
+      .line { fill: none; stroke: #111111; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      .lineThin { fill: none; stroke: #111111; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .lineWhite { fill: none; stroke: #FFFFFF; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect width="800" height="2000" fill="#F5F5F5"/>
+  <rect width="800" height="2000" fill="url(#boardDots)" opacity="0.55"/>
+  <rect x="36" y="36" width="728" height="1928" fill="none" stroke="#111111" stroke-width="4"/>
+  <rect x="58" y="58" width="684" height="1884" fill="none" stroke="#111111" stroke-width="1.5" stroke-dasharray="9 12" opacity="0.65"/>
+
+  <path d="M-76 98 L538 58 L620 312 L122 398 Z" fill="#B1FD00"/>
+  <path d="M550 68 H860 V304 L620 312 Z" fill="#5B5CF3"/>
+  <g transform="translate(70 84)">
+    <text x="0" y="108" class="en brand">PERSO</text>
+    <rect x="4" y="136" width="420" height="36" fill="#111111"/>
+    <text x="20" y="162" class="cn small white">MBTI ROUND TABLE GENERATOR</text>
+    <text x="0" y="270" class="cn hero">16 型人格围坐</text>
+    <text x="0" y="338" class="cn hero">替你讨论问题</text>
+  </g>
+
+  <g transform="translate(586 176) rotate(7)" filter="url(#hardShadow)">
+    <rect x="0" y="0" width="132" height="148" rx="18" fill="#FFC700"/>
+    <circle cx="66" cy="48" r="26" fill="#111111"/>
+    <path d="M51 48 H81 M66 33 V63" stroke="#FFC700" stroke-width="8" stroke-linecap="round"/>
+    <text x="66" y="108" text-anchor="middle" class="cn h3">开聊</text>
+  </g>
+
+  <g transform="translate(70 448)">
+    <path d="M0 0 H666 L638 88 H0 Z" fill="#111111"/>
+    <text x="24" y="34" class="cn body white">不是 MBTI 测试，也不是单个 AI 回答。</text>
+    <text x="24" y="68" class="cn body lime">Perso 把一个问题变成多人格、有声音、可回看的圆桌对话。</text>
+  </g>
+
+  <g transform="translate(66 590)">
+    <text x="0" y="0" class="cn h2">产品逻辑</text>
+    <text x="176" y="-2" class="cn small">从一个问题，到一桌观点</text>
+
+    <g transform="translate(0 34)">
+      <rect x="0" y="0" width="132" height="122" rx="18" fill="#FFC700" stroke="#111111" stroke-width="4"/>
+      <text x="24" y="42" class="cn h3">输入</text>
+      <text x="24" y="78" class="cn small">一个问题</text>
+      <path d="M92 80 H112 M102 70 V90" class="line"/>
+    </g>
+    <path d="M146 96 H176" class="line"/>
+    <path d="M176 96 l-14 -10 v20 z" fill="#111111"/>
+
+    <g transform="translate(190 34)">
+      <rect x="0" y="0" width="132" height="122" rx="18" fill="#A3F8FF" stroke="#111111" stroke-width="4"/>
+      <text x="24" y="42" class="cn h3">选择</text>
+      <text x="24" y="78" class="cn small">人格阵容</text>
+      <circle cx="92" cy="76" r="16" fill="#111111"/>
+      <circle cx="112" cy="76" r="16" fill="#5B5CF3"/>
+    </g>
+    <path d="M336 96 H366" class="line"/>
+    <path d="M366 96 l-14 -10 v20 z" fill="#111111"/>
+
+    <g transform="translate(380 34)">
+      <rect x="0" y="0" width="132" height="122" rx="18" fill="#B1FD00" stroke="#111111" stroke-width="4"/>
+      <text x="24" y="42" class="cn h3">生成</text>
+      <text x="24" y="78" class="cn small">圆桌对话</text>
+      <path d="M84 58 H116 V90 H96 L84 104 Z" class="line"/>
+    </g>
+    <path d="M526 96 H556" class="line"/>
+    <path d="M556 96 l-14 -10 v20 z" fill="#111111"/>
+
+    <g transform="translate(570 34)">
+      <rect x="0" y="0" width="132" height="122" rx="18" fill="#8046F5" stroke="#111111" stroke-width="4"/>
+      <text x="24" y="42" class="cn h3 yellow">听看</text>
+      <text x="24" y="78" class="cn small white">语音回看</text>
+      <path d="M88 74 C98 54 120 54 128 74" class="lineWhite"/>
+      <path d="M88 74 C98 94 120 94 128 74" class="lineWhite"/>
+    </g>
+  </g>
+
+  <g transform="translate(66 790)">
+    <path d="M0 0 H706 L672 94 H0 Z" fill="#111111"/>
+    <text x="28" y="60" class="cn h2 white">示例：30 岁了还在迷茫怎么办？</text>
+  </g>
+
+  <g transform="translate(66 910)">
+    <path d="M0 0 L310 -34 L340 138 L24 170 Z" fill="#FFC700" stroke="#111111" stroke-width="5"/>
+    <text x="28" y="48" class="en h2">INTJ</text>
+    <text x="28" y="92" class="cn body">先把“迷茫”拆成</text>
+    <text x="28" y="126" class="cn body">目标、资源和限制。</text>
+
+    <path d="M374 -24 L704 20 L670 182 L402 144 Z" fill="#8046F5" stroke="#111111" stroke-width="5"/>
+    <text x="422" y="54" class="en h2 white">ENFP</text>
+    <text x="422" y="98" class="cn body white">你是不是也想确认，</text>
+    <text x="422" y="132" class="cn body white">自己还期待什么？</text>
+
+    <path d="M20 232 L330 194 L350 370 L56 404 Z" fill="#A3F8FF" stroke="#111111" stroke-width="5"/>
+    <text x="58" y="282" class="en h2">ISTJ</text>
+    <text x="58" y="326" class="cn body">先看事实：你现在</text>
+    <text x="58" y="360" class="cn body">能承担多大试错？</text>
+
+    <path d="M388 218 L706 190 L720 380 L430 410 Z" fill="#B1FD00" stroke="#111111" stroke-width="5"/>
+    <text x="430" y="276" class="en h2 blue">ESTP</text>
+    <text x="430" y="320" class="cn body blue">别想太久，</text>
+    <text x="430" y="354" class="cn body blue">先试一个方向。</text>
+
+    <g transform="translate(292 178)" filter="url(#hardShadow)">
+      <circle cx="72" cy="72" r="72" fill="#111111"/>
+      <circle cx="72" cy="72" r="46" fill="#F5F5F5"/>
+      <text x="72" y="66" text-anchor="middle" class="cn small">一桌</text>
+      <text x="72" y="94" text-anchor="middle" class="cn small">开聊</text>
+    </g>
+  </g>
+
+  <g transform="translate(66 1358)">
+    <text x="0" y="0" class="cn h2">核心优势</text>
+    <text x="166" y="-2" class="cn small">为什么不是普通聊天机器人</text>
+
+    <g transform="translate(0 40)">
+      <rect x="0" y="0" width="216" height="166" rx="22" fill="#B1FD00" stroke="#111111" stroke-width="4"/>
+      <text x="24" y="50" class="cn h3">多人格视角</text>
+      <text x="24" y="88" class="cn small">同一问题，会被理性、</text>
+      <text x="24" y="118" class="cn small">共情、行动派拆开。</text>
+    </g>
+
+    <g transform="translate(246 40)">
+      <rect x="0" y="0" width="216" height="166" rx="22" fill="#FFC700" stroke="#111111" stroke-width="4"/>
+      <text x="24" y="50" class="cn h3">真实群聊感</text>
+      <text x="24" y="88" class="cn small">人格会接话、反驳，</text>
+      <text x="24" y="118" class="cn small">不是轮流念答案。</text>
+    </g>
+
+    <g transform="translate(492 40)">
+      <rect x="0" y="0" width="216" height="166" rx="22" fill="#5B5CF3" stroke="#111111" stroke-width="4"/>
+      <text x="24" y="50" class="cn h3 white">有声回看</text>
+      <text x="24" y="88" class="cn small white">人格语音与时间轴，</text>
+      <text x="24" y="118" class="cn small white">支持暂停、回看、分享。</text>
+    </g>
+  </g>
+
+  <g transform="translate(66 1598)">
+    <path d="M0 0 H706 L676 150 H0 Z" fill="#111111"/>
+    <text x="28" y="52" class="cn h2 white">使用流程</text>
+    <text x="28" y="94" class="cn body lime">扫码进入 → 输入问题 → 选择人格</text>
+    <text x="28" y="128" class="cn small cyan">开始圆桌 → 保存最像你的那一句</text>
+
+    <g transform="translate(500 30)">
+      <rect x="0" y="0" width="74" height="74" rx="14" fill="#A3F8FF"/>
+      <text x="37" y="48" text-anchor="middle" class="en h3">01</text>
+    </g>
+    <g transform="translate(582 30)">
+      <rect x="0" y="0" width="74" height="74" rx="14" fill="#FFC700"/>
+      <text x="37" y="48" text-anchor="middle" class="en h3">02</text>
+    </g>
+    <g transform="translate(664 30)">
+      <rect x="0" y="0" width="74" height="74" rx="14" fill="#B1FD00"/>
+      <text x="37" y="48" text-anchor="middle" class="en h3">03</text>
+    </g>
+  </g>
+
+  <path d="M-70 1778 L842 1688 L842 2030 L-70 2030 Z" fill="#0A0A0A"/>
+  <g transform="translate(70 1784)">
+    <text x="0" y="66" class="cn h2 white">扫码体验 Perso</text>
+    <text x="0" y="114" class="cn body lime">问一个你正在纠结的问题</text>
+    <text x="0" y="154" class="cn body cyan">让不同人格替你把话说开</text>
+    <text x="0" y="198" class="en h2 white">PERSO</text>
+  </g>
+
+  <g transform="translate(548 1736)" filter="url(#hardShadow)">
+    <rect x="0" y="0" width="194" height="194" rx="12" fill="#FFFFFF"/>
+    <rect x="18" y="18" width="52" height="52" fill="#111111"/>
+    <rect x="124" y="18" width="52" height="52" fill="#111111"/>
+    <rect x="18" y="124" width="52" height="52" fill="#111111"/>
+    <rect x="88" y="30" width="18" height="18" fill="#111111"/>
+    <rect x="106" y="58" width="18" height="18" fill="#111111"/>
+    <rect x="82" y="88" width="18" height="18" fill="#111111"/>
+    <rect x="126" y="90" width="18" height="18" fill="#111111"/>
+    <rect x="150" y="116" width="18" height="18" fill="#111111"/>
+    <rect x="92" y="136" width="18" height="18" fill="#111111"/>
+    <rect x="124" y="154" width="18" height="18" fill="#111111"/>
+  </g>
+</svg>

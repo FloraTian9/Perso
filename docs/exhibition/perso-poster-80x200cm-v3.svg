@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800mm" height="2000mm" viewBox="0 0 800 2000">
+  <defs>
+    <pattern id="v3Dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="5" cy="5" r="1.4" fill="#111111" opacity="0.20"/>
+    </pattern>
+    <filter id="v3Shadow" x="-20%" y="-20%" width="160%" height="160%">
+      <feDropShadow dx="10" dy="12" stdDeviation="0" flood-color="#111111" flood-opacity="1"/>
+    </filter>
+    <style>
+      .cn { font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; letter-spacing: 0; }
+      .en { font-family: "Arial Black", "Impact", "PingFang SC", sans-serif; letter-spacing: 0; }
+      .brand { font-size: 132px; font-weight: 950; fill: #111111; }
+      .hero { font-size: 86px; font-weight: 950; fill: #111111; }
+      .title { font-size: 52px; font-weight: 950; fill: #111111; }
+      .body { font-size: 28px; font-weight: 780; fill: #111111; }
+      .small { font-size: 20px; font-weight: 780; fill: #111111; }
+      .tiny { font-size: 15px; font-weight: 760; fill: #111111; }
+      .white { fill: #FFFFFF; }
+      .lime { fill: #B1FD00; }
+      .yellow { fill: #FFC700; }
+      .cyan { fill: #A3F8FF; }
+      .blue { fill: #5B5CF3; }
+      .purple { fill: #8046F5; }
+      .line { fill: none; stroke: #111111; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      .lineWhite { fill: none; stroke: #FFFFFF; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect width="800" height="2000" fill="#F5F5F5"/>
+  <rect width="800" height="2000" fill="url(#v3Dots)" opacity="0.5"/>
+  <rect x="36" y="36" width="728" height="1928" fill="none" stroke="#111111" stroke-width="4"/>
+  <rect x="58" y="58" width="684" height="1884" fill="none" stroke="#111111" stroke-width="1.5" stroke-dasharray="9 12" opacity="0.65"/>
+
+  <path d="M-80 108 L502 58 L594 356 L116 430 Z" fill="#B1FD00"/>
+  <path d="M510 70 H872 V360 L596 356 Z" fill="#5B5CF3"/>
+  <path d="M-80 520 L880 430 V526 L-80 620 Z" fill="#111111"/>
+  <path d="M-60 538 L860 456 V506 L-60 592 Z" fill="#A3F8FF"/>
+
+  <g transform="translate(70 92)">
+    <text x="0" y="116" class="en brand">PERSO</text>
+    <rect x="4" y="144" width="430" height="38" fill="#111111"/>
+    <text x="20" y="171" class="cn small white">MBTI ROUND TABLE GENERATOR</text>
+    <text x="0" y="294" class="cn hero">人格圆桌</text>
+    <text x="0" y="390" class="cn hero">正在开聊</text>
+  </g>
+
+  <g transform="translate(586 214) rotate(8)" filter="url(#v3Shadow)">
+    <rect x="0" y="0" width="126" height="152" rx="20" fill="#FFC700"/>
+    <circle cx="63" cy="54" r="28" fill="#111111"/>
+    <path d="M48 54 H78 M63 39 V69" stroke="#FFC700" stroke-width="8" stroke-linecap="round"/>
+    <text x="63" y="116" text-anchor="middle" class="cn body">开聊</text>
+  </g>
+
+  <g transform="translate(70 526)">
+    <text x="0" y="0" class="cn body white">把一个问题丢进去，听 16 型人格怎么接话。</text>
+    <text x="0" y="48" class="cn body lime">不是测试，是一场有声音、可回看的群聊现场。</text>
+  </g>
+
+  <g transform="translate(0 694)">
+    <path d="M92 74 L340 24 L424 152 L248 252 L84 216 Z" fill="#FFC700" stroke="#111111" stroke-width="5"/>
+    <path d="M392 28 L718 82 L670 236 L438 212 Z" fill="#8046F5" stroke="#111111" stroke-width="5"/>
+    <path d="M132 318 L420 264 L552 420 L310 520 L98 452 Z" fill="#A3F8FF" stroke="#111111" stroke-width="5"/>
+    <path d="M486 316 L724 288 L742 492 L552 558 L438 442 Z" fill="#B1FD00" stroke="#111111" stroke-width="5"/>
+    <path d="M74 560 L300 568 L356 714 L126 760 L50 646 Z" fill="#5B5CF3" stroke="#111111" stroke-width="5"/>
+    <path d="M406 592 L690 546 L732 710 L474 806 Z" fill="#FFC700" stroke="#111111" stroke-width="5"/>
+
+    <g transform="translate(120 118)">
+      <text x="0" y="0" class="en title">INTJ</text>
+      <path d="M0 35 H158" class="line"/>
+      <text x="0" y="80" class="cn body">先定标准</text>
+    </g>
+    <g transform="translate(444 102) rotate(6)">
+      <text x="0" y="0" class="en title white">ENFP</text>
+      <path d="M0 35 H166" class="lineWhite"/>
+      <text x="0" y="80" class="cn body white">我想到一个画面</text>
+    </g>
+    <g transform="translate(196 404) rotate(-5)">
+      <text x="0" y="0" class="en title">ISTJ</text>
+      <path d="M0 35 H154" class="line"/>
+      <text x="0" y="80" class="cn body">事实是这样</text>
+    </g>
+    <g transform="translate(526 402) rotate(5)">
+      <text x="0" y="0" class="en title blue">ESTP</text>
+      <path d="M0 35 H142" stroke="#5B5CF3" stroke-width="4" stroke-linecap="round"/>
+      <text x="0" y="80" class="cn body blue">先试一下</text>
+    </g>
+    <g transform="translate(102 656) rotate(-7)">
+      <text x="0" y="0" class="en title white">INFP</text>
+      <path d="M0 35 H146" class="lineWhite"/>
+      <text x="0" y="80" class="cn body white">我会在意感受</text>
+    </g>
+    <g transform="translate(474 674) rotate(-6)">
+      <text x="0" y="0" class="en title">ENTP</text>
+      <path d="M0 35 H156" class="line"/>
+      <text x="0" y="80" class="cn body">换个角度呢</text>
+    </g>
+
+    <g transform="translate(284 284)" filter="url(#v3Shadow)">
+      <circle cx="116" cy="116" r="116" fill="#111111"/>
+      <circle cx="116" cy="116" r="78" fill="#F5F5F5"/>
+      <text x="116" y="106" text-anchor="middle" class="cn title">一个问题</text>
+      <text x="116" y="148" text-anchor="middle" class="cn body">很多真心话</text>
+      <path d="M72 170 C100 198 132 198 160 170" class="line"/>
+    </g>
+  </g>
+
+  <g transform="translate(66 1496)">
+    <path d="M0 0 H362 L330 146 H0 Z" fill="#111111"/>
+    <text x="28" y="58" class="cn title white">不是测试</text>
+    <text x="28" y="108" class="cn body lime">是一桌会接话的人</text>
+
+    <g transform="translate(392 -8)">
+      <rect x="0" y="0" width="128" height="128" rx="20" fill="#B1FD00" stroke="#111111" stroke-width="4"/>
+      <path d="M38 56 C50 36 78 36 90 56 C78 76 50 76 38 56 Z" class="line"/>
+      <circle cx="64" cy="56" r="9" fill="#111111"/>
+      <text x="64" y="104" text-anchor="middle" class="cn small">旁观</text>
+    </g>
+    <g transform="translate(548 -8)">
+      <rect x="0" y="0" width="128" height="128" rx="20" fill="#A3F8FF" stroke="#111111" stroke-width="4"/>
+      <path d="M38 36 H88 V76 H58 L38 94 V36 Z" class="line"/>
+      <text x="64" y="104" text-anchor="middle" class="cn small">参与</text>
+    </g>
+  </g>
+
+  <g transform="translate(66 1664)">
+    <rect x="0" y="0" width="190" height="84" rx="42" fill="#8046F5" stroke="#111111" stroke-width="4"/>
+    <text x="95" y="54" text-anchor="middle" class="cn body yellow">有声人格</text>
+    <rect x="224" y="0" width="190" height="84" rx="42" fill="#FFC700" stroke="#111111" stroke-width="4"/>
+    <text x="319" y="54" text-anchor="middle" class="cn body">直播回看</text>
+    <rect x="448" y="0" width="190" height="84" rx="42" fill="#5B5CF3" stroke="#111111" stroke-width="4"/>
+    <text x="543" y="54" text-anchor="middle" class="cn body white">截图转发</text>
+  </g>
+
+  <path d="M-70 1790 L842 1700 L842 2030 L-70 2030 Z" fill="#0A0A0A"/>
+  <g transform="translate(70 1788)">
+    <text x="0" y="66" class="cn title white">扫码加入这桌</text>
+    <text x="0" y="114" class="cn body lime">问一个你正在纠结的问题</text>
+    <text x="0" y="154" class="cn body cyan">让不同人格替你把话说开</text>
+    <text x="0" y="230" class="en title white">PERSO</text>
+  </g>
+
+  <g transform="translate(548 1738)" filter="url(#v3Shadow)">
+    <rect x="0" y="0" width="194" height="194" rx="12" fill="#FFFFFF"/>
+    <rect x="18" y="18" width="52" height="52" fill="#111111"/>
+    <rect x="124" y="18" width="52" height="52" fill="#111111"/>
+    <rect x="18" y="124" width="52" height="52" fill="#111111"/>
+    <rect x="88" y="30" width="18" height="18" fill="#111111"/>
+    <rect x="106" y="58" width="18" height="18" fill="#111111"/>
+    <rect x="82" y="88" width="18" height="18" fill="#111111"/>
+    <rect x="126" y="90" width="18" height="18" fill="#111111"/>
+    <rect x="150" y="116" width="18" height="18" fill="#111111"/>
+    <rect x="92" y="136" width="18" height="18" fill="#111111"/>
+    <rect x="124" y="154" width="18" height="18" fill="#111111"/>
+  </g>
+</svg>

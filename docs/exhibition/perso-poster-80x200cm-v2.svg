@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800mm" height="2000mm" viewBox="0 0 800 2000">
+  <defs>
+    <pattern id="dotGrid" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="4" cy="4" r="1.3" fill="#111111" opacity="0.22"/>
+    </pattern>
+    <pattern id="stripe" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(90)">
+      <rect width="5" height="14" fill="#111111" opacity="0.18"/>
+    </pattern>
+    <filter id="posterShadow" x="-20%" y="-20%" width="160%" height="160%">
+      <feDropShadow dx="10" dy="12" stdDeviation="0" flood-color="#111111" flood-opacity="1"/>
+    </filter>
+    <style>
+      .cn { font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; letter-spacing: 0; }
+      .en { font-family: "Arial Black", "Impact", "PingFang SC", sans-serif; letter-spacing: 0; }
+      .brand { font-size: 128px; font-weight: 950; fill: #111111; }
+      .huge { font-size: 90px; font-weight: 950; fill: #111111; }
+      .title { font-size: 54px; font-weight: 950; fill: #111111; }
+      .body { font-size: 28px; font-weight: 760; fill: #111111; }
+      .small { font-size: 18px; font-weight: 760; fill: #111111; }
+      .tiny { font-size: 14px; font-weight: 760; fill: #111111; }
+      .white { fill: #FFFFFF; }
+      .lime { fill: #B1FD00; }
+      .purpleText { fill: #5B5CF3; }
+      .yellow { fill: #FFC700; }
+      .cyan { fill: #A3F8FF; }
+      .purple { fill: #8046F5; }
+      .line { fill: none; stroke: #111111; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      .lineThin { fill: none; stroke: #111111; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect width="800" height="2000" fill="#F5F5F5"/>
+  <rect x="0" y="0" width="800" height="2000" fill="url(#dotGrid)" opacity="0.45"/>
+  <rect x="36" y="36" width="728" height="1928" fill="none" stroke="#111111" stroke-width="4"/>
+  <rect x="58" y="58" width="684" height="1884" fill="none" stroke="#111111" stroke-width="1.5" stroke-dasharray="9 12" opacity="0.65"/>
+
+  <path d="M-70 126 L516 74 L606 364 L130 454 Z" fill="#B1FD00"/>
+  <path d="M520 82 L850 82 L850 386 L610 360 Z" fill="#5B5CF3"/>
+  <path d="M-90 468 L872 366 L872 452 L-90 560 Z" fill="#111111"/>
+  <path d="M-70 488 L872 384 L872 432 L-70 536 Z" fill="#A3F8FF"/>
+
+  <g transform="translate(70 92)">
+    <text x="0" y="118" class="en brand">PERSO</text>
+    <rect x="4" y="144" width="382" height="36" fill="#111111"/>
+    <text x="20" y="169" class="cn small white">MBTI ROUND TABLE GENERATOR</text>
+    <text x="0" y="286" class="cn huge">把问题</text>
+    <text x="0" y="388" class="cn huge">开成一桌</text>
+  </g>
+
+  <g transform="translate(588 205) rotate(8)" filter="url(#posterShadow)">
+    <rect x="0" y="0" width="126" height="156" rx="20" fill="#FFC700"/>
+    <circle cx="63" cy="55" r="29" fill="#111111"/>
+    <path d="M48 55 H78 M63 40 V70" stroke="#FFC700" stroke-width="8" stroke-linecap="round"/>
+    <text x="63" y="118" text-anchor="middle" class="cn body">开聊</text>
+  </g>
+
+  <g transform="translate(70 536)">
+    <path d="M0 0 H612 L584 96 H0 Z" fill="#111111"/>
+    <text x="24" y="39" class="cn body white">16 型人格不是选项，是 16 张会说话的票。</text>
+    <text x="24" y="76" class="cn body lime">恋爱、职场、人生小题，他们开始接话、反驳、补刀。</text>
+  </g>
+
+  <g transform="translate(0 694)">
+    <path d="M84 92 L332 18 L416 156 L260 256 L76 214 Z" fill="#FFC700" stroke="#111111" stroke-width="5"/>
+    <path d="M382 0 L720 68 L668 236 L438 204 Z" fill="#8046F5" stroke="#111111" stroke-width="5"/>
+    <path d="M162 296 L450 246 L570 410 L306 514 L128 438 Z" fill="#A3F8FF" stroke="#111111" stroke-width="5"/>
+    <path d="M476 300 L730 270 L744 490 L552 562 L432 438 Z" fill="#B1FD00" stroke="#111111" stroke-width="5"/>
+    <path d="M66 532 L284 548 L354 704 L118 760 L48 640 Z" fill="#5B5CF3" stroke="#111111" stroke-width="5"/>
+    <path d="M392 576 L686 528 L734 704 L470 810 Z" fill="#FFC700" stroke="#111111" stroke-width="5"/>
+
+    <g transform="translate(112 110)">
+      <text x="0" y="0" class="en title">INTJ</text>
+      <path d="M0 34 H170" class="line"/>
+      <text x="0" y="78" class="cn body">先定标准</text>
+    </g>
+    <g transform="translate(432 82) rotate(7)">
+      <text x="0" y="0" class="en title white">ENFP</text>
+      <path d="M0 34 H190" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+      <text x="0" y="78" class="cn body white">等下，我想到一个画面</text>
+    </g>
+    <g transform="translate(214 358) rotate(-5)">
+      <text x="0" y="0" class="en title">ISTJ</text>
+      <path d="M0 34 H168" class="line"/>
+      <text x="0" y="78" class="cn body">事实是这样</text>
+    </g>
+    <g transform="translate(522 386) rotate(5)">
+      <text x="0" y="0" class="en title purpleText">ESTP</text>
+      <path d="M0 34 H154" stroke="#5B5CF3" stroke-width="4" stroke-linecap="round"/>
+      <text x="0" y="78" class="cn body purpleText">先试一下</text>
+    </g>
+    <g transform="translate(98 632) rotate(-7)">
+      <text x="0" y="0" class="en title white">INFP</text>
+      <path d="M0 34 H158" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+      <text x="0" y="78" class="cn body white">但我会在意感受</text>
+    </g>
+    <g transform="translate(460 662) rotate(-6)">
+      <text x="0" y="0" class="en title">ENTP</text>
+      <path d="M0 34 H172" class="line"/>
+      <text x="0" y="78" class="cn body">换个角度呢？</text>
+    </g>
+
+    <g transform="translate(284 270)" filter="url(#posterShadow)">
+      <circle cx="116" cy="116" r="116" fill="#111111"/>
+      <circle cx="116" cy="116" r="78" fill="#F5F5F5"/>
+      <text x="116" y="104" text-anchor="middle" class="cn title">一个问题</text>
+      <text x="116" y="148" text-anchor="middle" class="cn body">很多真心话</text>
+      <path d="M70 168 C98 198 134 198 162 168" class="line"/>
+    </g>
+
+    <path d="M78 820 C248 730 412 804 640 728" class="lineThin" stroke-dasharray="8 12"/>
+    <path d="M626 720 l-20 -8 l14 20 z" fill="#111111"/>
+  </g>
+
+  <g transform="translate(66 1458)">
+    <path d="M0 0 H366 L330 148 H0 Z" fill="#111111"/>
+    <text x="28" y="58" class="cn title white">不是测试</text>
+    <text x="28" y="108" class="cn body lime">是一场可回看的群聊现场</text>
+
+    <g transform="translate(396 -14)">
+      <rect x="0" y="0" width="126" height="126" rx="18" fill="#B1FD00" stroke="#111111" stroke-width="4"/>
+      <path d="M38 54 C48 36 76 36 86 54 C76 74 48 74 38 54 Z" class="line"/>
+      <circle cx="63" cy="54" r="9" fill="#111111"/>
+      <text x="63" y="102" text-anchor="middle" class="cn small">旁观</text>
+    </g>
+    <g transform="translate(552 -14)">
+      <rect x="0" y="0" width="126" height="126" rx="18" fill="#A3F8FF" stroke="#111111" stroke-width="4"/>
+      <path d="M36 36 H84 V76 H54 L36 92 V36 Z" class="line"/>
+      <text x="63" y="102" text-anchor="middle" class="cn small">参与</text>
+    </g>
+  </g>
+
+  <g transform="translate(66 1644)">
+    <rect x="0" y="0" width="190" height="88" rx="44" fill="#8046F5" stroke="#111111" stroke-width="4"/>
+    <text x="95" y="55" text-anchor="middle" class="cn body yellow">有声人格</text>
+    <rect x="224" y="0" width="190" height="88" rx="44" fill="#FFC700" stroke="#111111" stroke-width="4"/>
+    <text x="319" y="55" text-anchor="middle" class="cn body">直播回看</text>
+    <rect x="448" y="0" width="190" height="88" rx="44" fill="#5B5CF3" stroke="#111111" stroke-width="4"/>
+    <text x="543" y="55" text-anchor="middle" class="cn body white">截图转发</text>
+  </g>
+
+  <path d="M-70 1780 L842 1688 L842 2030 L-70 2030 Z" fill="#0A0A0A"/>
+  <g transform="translate(70 1774)">
+    <text x="0" y="70" class="cn title white">扫码加入这桌</text>
+    <text x="0" y="118" class="cn body lime">问一个你正在纠结的问题</text>
+    <text x="0" y="158" class="cn body cyan">让不同人格替你把话说开</text>
+    <text x="0" y="232" class="en title white">PERSO</text>
+  </g>
+
+  <g transform="translate(548 1726)" filter="url(#posterShadow)">
+    <rect x="0" y="0" width="194" height="194" rx="12" fill="#FFFFFF"/>
+    <rect x="18" y="18" width="52" height="52" fill="#111111"/>
+    <rect x="124" y="18" width="52" height="52" fill="#111111"/>
+    <rect x="18" y="124" width="52" height="52" fill="#111111"/>
+    <rect x="88" y="30" width="18" height="18" fill="#111111"/>
+    <rect x="106" y="58" width="18" height="18" fill="#111111"/>
+    <rect x="82" y="88" width="18" height="18" fill="#111111"/>
+    <rect x="126" y="90" width="18" height="18" fill="#111111"/>
+    <rect x="150" y="116" width="18" height="18" fill="#111111"/>
+    <rect x="92" y="136" width="18" height="18" fill="#111111"/>
+    <rect x="124" y="154" width="18" height="18" fill="#111111"/>
+  </g>
+
+  <g transform="translate(604 1648) rotate(4)">
+    <rect x="0" y="0" width="104" height="38" fill="#B1FD00" stroke="#111111" stroke-width="3"/>
+    <text x="52" y="26" text-anchor="middle" class="cn tiny">QR HERE</text>
+  </g>
+</svg>

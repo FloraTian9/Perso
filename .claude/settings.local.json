@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.totypes.com)",
+      "Bash(python3 -c ' *)",
+      "Read(//Users/tianfengrong/MediaCrawler/**)",
+      "Bash(python main.py)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(ls -la venv/)",
+      "Bash(ls -la .venv/)",
+      "Bash(venv/bin/python main.py)",
+      "Bash(npm run *)",
+      "Bash(npx tsx *)",
+      "Bash(/Users/tianfengrong/.nvm/versions/node/v18.20.4/bin/npm run *)",
+      "Bash(lsof -ti:3000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl -s -X POST http://localhost:3000/api/sessions/init -H 'Content-Type: application/json' -d '{\"topic\":\"今晚吃什么\",\"mode\":\"spectator\",\"personas\":[\"INTJ\",\"ENFP\",\"ISTJ\",\"ENTP\"]}')",
+      "Bash(open \"http://localhost:3000/\")",
+      "Bash(python3 -c \"import json,sys; print\\(json.load\\(sys.stdin\\)['session_id']\\)\")",
+      "Bash(open \"http://localhost:3000/table/36bd1d85-7d52-46f8-9e34-86b915b4b27a\")",
+      "Bash(node -e ' *)",
+      "Bash(unzip -p \"固件上传软件.zip\" \"*/devices.txt\")",
+      "Bash(unzip -p \"固件上传软件.zip\" \"*/license.txt\")"
+    ]
+  }
+}

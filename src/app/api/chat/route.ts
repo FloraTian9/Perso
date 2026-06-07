@@ -1,6 +1,6 @@
 import { streamQwenChat } from "@/lib/qwen";
 import { buildSpectatorOpeningSystemPrompt, buildSpectatorSystemPrompt } from "@/lib/prompts/spectator";
-import { buildParticipantSystemPrompt, buildParticipantNextTurnMessages } from "@/lib/prompts/participant";
+import { buildParticipantAutoContinuationMessages, buildParticipantSystemPrompt, buildParticipantNextTurnMessages } from "@/lib/prompts/participant";
 import type { Atmosphere, ChatMessage, NormalizedChatMode, PersonaId, RoundtableMessage } from "@/types";
 
 export const runtime = "nodejs";
@@ -19,6 +19,7 @@ type ChatRequestBody = {
   phase?: unknown;
   atmosphere?: unknown;
   privateNote?: unknown;
+  nextPersona?: unknown;
 };
 
 const personaIds = new Set<PersonaId>([
@@ -113,16 +114,35 @@ const validHistoryPersonas = new Set<string>([...personaIds, "user"]);
 function asHistory(value: unknown): RoundtableMessage[] {
   if (!Array.isArray(value)) return [];
   return value
-    .filter(
-      (m): m is RoundtableMessage =>
-        m !== null &&
-        typeof m === "object" &&
-        typeof m.id === "string" &&
-        typeof m.persona === "string" &&
-        validHistoryPersonas.has(m.persona) &&
-        typeof m.content === "string" &&
-        m.content.length <= 500,
-    )
+    .map((m, index): RoundtableMessage | null => {
+      if (
+        m === null ||
+        typeof m !== "object" ||
+        typeof (m as { persona?: unknown }).persona !== "string" ||
+        !validHistoryPersonas.has((m as { persona: string }).persona) ||
+        typeof (m as { content?: unknown }).content !== "string" ||
+        (m as { content: string }).content.length > 500
+      ) {
+        return null;
+      }
+      const raw = m as {
+        id?: unknown;
+        persona: PersonaId | "user";
+        content: string;
+        turn?: unknown;
+        timestamp?: unknown;
+        label?: unknown;
+      };
+      return {
+        id: typeof raw.id === "string" ? raw.id : `history-${index}`,
+        persona: raw.persona,
+        content: raw.content,
+        turn: typeof raw.turn === "number" ? raw.turn : index + 1,
+        timestamp: typeof raw.timestamp === "number" ? raw.timestamp : Date.now(),
+        label: typeof raw.label === "string" ? (raw.label as RoundtableMessage["label"]) : undefined,
+      };
+    })
+    .filter((m): m is RoundtableMessage => m !== null)
     .slice(0, 50);
 }
 
@@ -138,6 +158,10 @@ function asPrivateNote(value: unknown, personas: PersonaId[]): { targetPersona: 
 
 function isPersonaInList(value: unknown, personas: PersonaId[]): value is PersonaId {
   return typeof value === "string" && personaIds.has(value as PersonaId) && personas.includes(value as PersonaId);
+}
+
+function asNextPersona(value: unknown, personas: PersonaId[]): PersonaId | undefined {
+  return isPersonaInList(value, personas) ? value : undefined;
 }
 
 function isSensitiveTopic(topic: string): boolean {
@@ -179,18 +203,22 @@ function buildMessages(body: ChatRequestBody): ChatMessage[] {
     const phase = asFunPhase(body.phase);
     const history = asHistory(body.messages);
     const privateNote = asPrivateNote(body.privateNote, personas);
+    const nextPersona = phase === "opening" || privateNote ? undefined : asNextPersona(body.nextPersona, personas);
     const remainingTurns = phase === "opening" ? FUN_OPENING_TURNS : phase === "note" ? 1 : Math.max(4, 12 - history.length);
     const roundOpeningVariantHint = phase === "opening" && history.length === 0 ? buildRoundOpeningVariantHint() : "";
     const systemPrompt = phase === "opening"
       ? buildSpectatorOpeningSystemPrompt({ topic, personas, turnCount: FUN_OPENING_TURNS, atmosphere })
-      : buildSpectatorSystemPrompt({ topic, personas, turnCount: remainingTurns, atmosphere, privateNote });
+      : buildSpectatorSystemPrompt({ topic, personas, turnCount: remainingTurns, atmosphere, privateNote, nextPersona });
     const historyText = history
       .map((message) => {
         const label = message.label ? `[${message.label}] ` : "";
         return `${message.persona}: ${label}${message.content}`;
       })
       .join("\n");
-    const nextAtmosphereInstruction = `当前气氛是「${atmosphereLabel(atmosphere)}」。下一条发言必须立刻、明显体现这个气氛，同时接住上一条的具体内容。`;
+    const nextSpeakerInstruction = nextPersona
+      ? `下一条发言必须由 ${nextPersona} 发出，content 必须按 ${nextPersona} 的人格和当前气氛从一开始生成。`
+      : "下一条发言的人格由上下文自然决定。";
+    const nextAtmosphereInstruction = `当前气氛是「${atmosphereLabel(atmosphere)}」。${nextSpeakerInstruction} 下一条发言必须立刻、明显体现这个气氛，同时接住上一条的具体内容。`;
 
     return [
       { role: "system", content: systemPrompt },
@@ -211,20 +239,30 @@ function buildMessages(body: ChatRequestBody): ChatMessage[] {
 
   if (body.opening === true) {
     const roundOpeningVariantHint = buildRoundOpeningVariantHint();
+    const openingTurnCount = personas.length;
+    const openingOrder = personas.join(" → ");
     return [
       { role: "system", content: systemPrompt },
       {
         role: "user",
-        content: `当前话题是「${topic}」。${roundOpeningVariantHint}\n\n请先开场。用 1-2 条发言展示各人格对「${topic}」的初始看法，语气自然，等待用户加入圆桌。主线必须围绕「${topic}」，但可以有一句由话题自然引发的联想或吐槽。同一个话题重新开局时，不要默认采用最常规、最安全的开头。`,
+        content: `当前话题是「${topic}」。${roundOpeningVariantHint}\n\n请先开场。必须生成 ${openingTurnCount} 条发言，让所选人格按这个顺序各说 1 条：${openingOrder}。每条都要展示该人格对「${topic}」的初始看法，语气自然。主线必须围绕「${topic}」，但可以有一句由话题自然引发的联想或吐槽。同一个话题重新开局时，不要默认采用最常规、最安全的开头。只输出这 ${openingTurnCount} 条；只写人格之间的讨论，不写面向人类参与者的开场白、邀请或催促。`,
       },
     ];
   }
 
   const history = asHistory(body.messages);
-  const lastUserMessage =
-    typeof body.userMessage === "string" && body.userMessage.trim()
-      ? body.userMessage.trim().slice(0, 500)
-      : "你们好，我来了。";
+  const lastUserMessage = typeof body.userMessage === "string" && body.userMessage.trim()
+    ? body.userMessage.trim().slice(0, 500)
+    : "";
+
+  if (!lastUserMessage) {
+    const autoMessages = buildParticipantAutoContinuationMessages({
+      topic,
+      history,
+      turnCount: Math.max(3, Math.min(4, personas.length)),
+    });
+    return [{ role: "system", content: systemPrompt }, ...autoMessages];
+  }
 
   const turnMessages = buildParticipantNextTurnMessages({
     topic,
@@ -249,7 +287,10 @@ export async function POST(request: Request) {
 
   const mode = asMode(body.mode);
   const phase = asFunPhase(body.phase);
-  const maxTokens = mode === "participant" ? 500 : phase === "opening" ? 700 : phase === "note" ? 500 : 4000;
+  const participantHasUserMessage = typeof body.userMessage === "string" && body.userMessage.trim();
+  const maxTokens = mode === "participant"
+    ? (body.opening === true || !participantHasUserMessage ? 900 : 500)
+    : phase === "opening" ? 700 : phase === "note" ? 500 : 4000;
   const topic = asTopic(body);
   const personas = asPersonas(body.personas);
   const traceLabel =

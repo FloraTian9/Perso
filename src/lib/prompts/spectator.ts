@@ -10,6 +10,7 @@ type BuildSpectatorPromptOptions = {
     targetPersona: PersonaId;
     content: string;
   };
+  nextPersona?: PersonaId;
 };
 
 // Output format is JSON Lines (not [PERSONA] text lines) for structured
@@ -36,17 +37,17 @@ function buildAtmosphereBlock(atmosphere: Atmosphere = "plain"): string {
 
   if (atmosphere === "sincere") {
     return `## 当前气氛：更真诚
-- 下一条发言必须立刻、明显体现“更真诚”：少包装，直接说真实担心或真实在意。
-- 这轮少抬杠，少包装，多说真实担心、真实在意和真实动机。
-- 可以让人格承认自己的犹豫、心虚、害怕或期待。
+- 下一条发言必须立刻、明显体现“更真诚”：少包装，直接说一个真实担心、真实在意或真实动机。
+- 必须出现一个具体的脆弱点或私心，比如怕什么、舍不得什么、其实在意什么；不要只把语气变温柔。
+- 可以承认犹豫、心虚、害怕或期待，但要落到具体场景和动作。
 - 不要变成鸡汤，不要用空泛词替代具体表达。`;
   }
 
   if (atmosphere === "assertive") {
     return `## 当前气氛：更强势
-- 下一条发言必须立刻、明显体现“更强势”：判断更明确，不要先铺垫或观望。
-- 这轮判断更明确，少绕弯，不要每句话都留余地。
-- 人格可以直接指出问题、直接给出倾向。
+- 下一条发言必须立刻、明显体现“更强势”：先给明确判断，再给理由，不要先铺垫或观望。
+- 必须直接站边、指出问题或给出倾向；少说“可能、也许、看情况、我觉得可以”。
+- 这轮少绕弯，不要每句话都留余地。
 - 强势不是粗暴；要有理由、有具体指向。`;
   }
 
@@ -78,6 +79,14 @@ function buildPrivateNoteBlock(privateNote?: BuildSpectatorPromptOptions["privat
 2. 其他人格不知道纸条内容，不能提到“纸条”。
 3. 下一条发言必须由 ${privateNote.targetPersona} 发出。
 4. ${privateNote.targetPersona} 要受到纸条影响，但不要生硬复述纸条。`;
+}
+
+function buildNextSpeakerBlock(nextPersona?: PersonaId): string {
+  if (!nextPersona) return "";
+
+  return `## 下一条说话人格
+下一条发言必须由 ${nextPersona} 发出。
+生成 content 时就必须按 ${nextPersona} 的人格、语气和当前气氛来写，不要先写其他人格再把 persona 字段改成 ${nextPersona}。`;
 }
 
 export function buildSpectatorOpeningSystemPrompt({
@@ -129,6 +138,7 @@ export function buildSpectatorSystemPrompt({
   turnCount = 12,
   atmosphere = "plain",
   privateNote,
+  nextPersona,
 }: BuildSpectatorPromptOptions): string {
   const personaBlocks = buildPersonaBlocks(personas);
   const occurrenceRule =
@@ -151,6 +161,8 @@ ${personaBlocks}
 ${buildAtmosphereBlock(atmosphere)}
 
 ${buildPrivateNoteBlock(privateNote)}
+
+${buildNextSpeakerBlock(privateNote ? undefined : nextPersona)}
 
 ## 播客风格（严格参照）
 

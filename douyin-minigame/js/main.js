@@ -176,8 +176,16 @@ function readKeyboardEventValue(event, fallback) {
     candidates.push(event.value);
     candidates.push(event.text);
     candidates.push(event.data);
-    if (event.detail && typeof event.detail === "object") candidates.push(event.detail.value);
-    if (event.target && typeof event.target === "object") candidates.push(event.target.value);
+    if (event.detail && typeof event.detail === "object") {
+      candidates.push(event.detail.value);
+      candidates.push(event.detail.text);
+      candidates.push(event.detail.data);
+    }
+    if (event.target && typeof event.target === "object") {
+      candidates.push(event.target.value);
+      candidates.push(event.target.text);
+      candidates.push(event.target.data);
+    }
   }
 
   for (var i = 0; i < candidates.length; i += 1) {
@@ -397,6 +405,7 @@ function PersoMinigame() {
   this.ttsError = "";
   this.isFetchingContinuation = false;
   this.thinkingVisible = false;
+  this.thinkingPersona = "";
   this.progressDragging = false;
   this.progressDragRatio = 1;
   this.isAtLiveEdge = true;
@@ -573,6 +582,7 @@ PersoMinigame.prototype.handleTapDeduped = function handleTapDeduped(x, y) {
 };
 
 PersoMinigame.prototype.shouldUseCanvasKeyboard = function shouldUseCanvasKeyboard() {
+  if (this.tt && this.tt.showKeyboard) return false;
   var platform = String(this.systemInfo.platform || "").toLowerCase();
   if (platform === "ios" || platform === "android") return false;
   return platform === "devtools" || platform === "windows" || platform === "mac" || typeof window !== "undefined";
@@ -667,26 +677,25 @@ PersoMinigame.prototype.handleCanvasPaste = function handleCanvasPaste(event) {
 
 PersoMinigame.prototype.bindCanvasKeyboardEvents = function bindCanvasKeyboardEvents() {
   var self = this;
-  var targets = [];
-  if (this.canvas && this.canvas.addEventListener) targets.push(this.canvas);
-  if (typeof window !== "undefined" && window.addEventListener && targets.indexOf(window) < 0) targets.push(window);
-  if (typeof document !== "undefined" && document.addEventListener && targets.indexOf(document) < 0) targets.push(document);
-  if (typeof globalThis !== "undefined" && globalThis.addEventListener && targets.indexOf(globalThis) < 0) targets.push(globalThis);
+  var target = null;
+  if (typeof document !== "undefined" && document.addEventListener) target = document;
+  else if (typeof window !== "undefined" && window.addEventListener) target = window;
+  else if (typeof globalThis !== "undefined" && globalThis.addEventListener) target = globalThis;
+  else if (this.canvas && this.canvas.addEventListener) target = this.canvas;
+  if (!target) return;
 
-  for (var i = 0; i < targets.length; i += 1) {
-    targets[i].addEventListener("keydown", function onKeydown(event) {
-      self.handleCanvasKeyboardEvent(event);
-    });
-    targets[i].addEventListener("compositionstart", function onCompositionStart() {
-      self.keyboardComposing = true;
-    });
-    targets[i].addEventListener("compositionend", function onCompositionEnd(event) {
-      self.handleCanvasCompositionEnd(event);
-    });
-    targets[i].addEventListener("paste", function onPaste(event) {
-      self.handleCanvasPaste(event);
-    });
-  }
+  target.addEventListener("keydown", function onKeydown(event) {
+    self.handleCanvasKeyboardEvent(event);
+  });
+  target.addEventListener("compositionstart", function onCompositionStart() {
+    self.keyboardComposing = true;
+  });
+  target.addEventListener("compositionend", function onCompositionEnd(event) {
+    self.handleCanvasCompositionEnd(event);
+  });
+  target.addEventListener("paste", function onPaste(event) {
+    self.handleCanvasPaste(event);
+  });
 };
 
 PersoMinigame.prototype.bindEvents = function bindEvents() {
@@ -2026,7 +2035,7 @@ PersoMinigame.prototype.prepareParticipantInterruption = function preparePartici
   this.thinkingVisible = false;
   this.generationRequestId += 1;
 
-  if (this.isLiveMessageComplete()) {
+  if (this.isLiveMessageReadyToAdvance()) {
     this.status = "waiting";
     this.stopPlaybackLoop();
     this.stopVoiceAudio();
@@ -2376,7 +2385,7 @@ PersoMinigame.prototype.openRoundtable = function openRoundtable(messages) {
   if (this.mode !== "participant") this.requestContinuation(false);
 };
 
-PersoMinigame.prototype.requestContinuation = function requestContinuation(showThinking, forceBeyondLimit) {
+PersoMinigame.prototype.requestContinuation = function requestContinuation(showThinking, forceBeyondLimit, forcedFirstPersona) {
   var apiBaseUrl = normalizeOrigin(config.API_BASE_URL);
   var self = this;
   if (config.FORCE_MOCK_GENERATION) {
@@ -2387,6 +2396,7 @@ PersoMinigame.prototype.requestContinuation = function requestContinuation(showT
 
   this.isFetchingContinuation = true;
   if (showThinking) this.thinkingVisible = true;
+  this.thinkingPersona = isPersona(forcedFirstPersona) ? forcedFirstPersona : "";
   var requestId = ++this.generationRequestId;
   this.tt.request({
     url: apiBaseUrl + "/api/chat",
@@ -2397,6 +2407,7 @@ PersoMinigame.prototype.requestContinuation = function requestContinuation(showT
       mode: this.mode === "participant" ? "participant" : "fun",
       phase: "continuation",
       atmosphere: this.atmosphere,
+      nextPersona: isPersona(forcedFirstPersona) ? forcedFirstPersona : "",
       personas: this.selected,
       messages: this.tableMessages
     },
@@ -2406,22 +2417,30 @@ PersoMinigame.prototype.requestContinuation = function requestContinuation(showT
       var responseText = typeof response.data === "string"
         ? response.data
         : JSON.stringify(response.data || {});
-      self.isFetchingContinuation = false;
-      self.thinkingVisible = false;
 
       if (statusCode >= 400) {
+        self.isFetchingContinuation = false;
+        self.thinkingVisible = false;
+        self.thinkingPersona = "";
         if (self.liveMessageIndex >= self.tableMessages.length - 1) self.finishRoundtableExperience();
         self.render();
         return;
       }
 
       var nextMessages = parseRoundtableMessages(responseText);
+      if (isPersona(forcedFirstPersona) && nextMessages.length) nextMessages[0].persona = forcedFirstPersona;
+      var shouldAdvanceFromCurrent = self.shouldAdvanceFromCompletedLiveMessage();
+      var firstNewIndex = self.tableMessages.length;
+      self.isFetchingContinuation = false;
+      self.thinkingVisible = false;
+      self.thinkingPersona = "";
       for (var i = 0; i < nextMessages.length; i += 1) {
         nextMessages[i].turn = self.tableMessages.length + 1;
         self.tableMessages.push(nextMessages[i]);
       }
       self.messages = self.tableMessages;
-      if (forceBeyondLimit && nextMessages.length && self.isLiveMessageComplete()) {
+      if (shouldAdvanceFromCurrent && nextMessages.length) self.advanceLiveMessageTo(firstNewIndex);
+      if (forceBeyondLimit && nextMessages.length && self.isLiveMessageReadyToAdvance()) {
         self.liveHoldTicks = self.getBetweenMessageTicks();
         self.messageHoldTicks = self.getBetweenMessageTicks();
       }
@@ -2435,6 +2454,7 @@ PersoMinigame.prototype.requestContinuation = function requestContinuation(showT
       if (requestId !== self.generationRequestId) return;
       self.isFetchingContinuation = false;
       self.thinkingVisible = false;
+      self.thinkingPersona = "";
       if (isInvalidDomainError(error)) self.ttsError = formatNetworkFailMessage(error);
       if (self.liveMessageIndex >= self.tableMessages.length - 1) self.finishRoundtableExperience();
       self.render();
@@ -2472,12 +2492,14 @@ PersoMinigame.prototype.createMockNoteMessage = function createMockNoteMessage(t
   };
 };
 
-PersoMinigame.prototype.createMockParticipantReply = function createMockParticipantReply(userMessage) {
+PersoMinigame.prototype.createMockParticipantReply = function createMockParticipantReply(userMessage, forcedFirstPersona) {
   var personas = this.selected.length ? this.selected : config.DEFAULT_PERSONAS;
   var currentPersona = (this.tableMessages[this.liveMessageIndex] || {}).persona;
   var currentIndex = personas.indexOf(currentPersona);
-  var firstPersona = personas[(currentIndex + 1 + personas.length) % personas.length] || personas[0];
-  var secondPersona = personas[(currentIndex + 2 + personas.length) % personas.length] || personas[0];
+  var firstPersona = isPersona(forcedFirstPersona) ? forcedFirstPersona : personas[(currentIndex + 1 + personas.length) % personas.length] || personas[0];
+  var firstIndex = personas.indexOf(firstPersona);
+  if (firstIndex < 0) firstIndex = currentIndex;
+  var secondPersona = personas[(firstIndex + 1 + personas.length) % personas.length] || personas[0];
   var firstText = "我接住你这句。\"" + userMessage.slice(0, 32) + "\" 其实把问题从抽象讨论拉回你自己的判断了。";
   var secondText = "我会再补一刀：现在别急着找标准答案，先看哪个选择会让你明天就能行动。";
 
@@ -2495,6 +2517,31 @@ PersoMinigame.prototype.createMockParticipantReply = function createMockParticip
       turn: this.tableMessages.length + 2
     }
   ];
+};
+
+PersoMinigame.prototype.createMockParticipantAutoContinuation = function createMockParticipantAutoContinuation(forcedFirstPersona) {
+  var personas = this.selected.length ? this.selected : config.DEFAULT_PERSONAS;
+  var currentPersona = (this.tableMessages[this.liveMessageIndex] || {}).persona;
+  var currentIndex = personas.indexOf(currentPersona);
+  var firstPersona = isPersona(forcedFirstPersona) ? forcedFirstPersona : personas[(currentIndex + 1 + personas.length) % personas.length] || personas[0];
+  var firstIndex = personas.indexOf(firstPersona);
+  if (firstIndex < 0) firstIndex = currentIndex;
+  var lines = [
+    "我先接一下上一句。这个点不是要马上得出结论，而是看它到底卡在哪个选择上。",
+    "但如果一直停在分析里，就会变成绕圈。至少要说清楚现在最不想承担的那个代价。",
+    "我会补一个现实判断：别急着把它讲漂亮，先看明天真的能不能做一步。",
+    "也别把话说死。这个话题有趣的地方，就是每个人在意的东西不一样。"
+  ];
+  var labels = ["回应", "反驳", "落地", "补充"];
+
+  return lines.map(function mapLine(content, index) {
+    return {
+      persona: personas[(firstIndex + index + personas.length) % personas.length] || personas[0],
+      content: content,
+      label: labels[index % labels.length],
+      turn: this.tableMessages.length + index + 1
+    };
+  }, this);
 };
 
 PersoMinigame.prototype.createAtmosphereMockMessage = function createAtmosphereMockMessage() {
@@ -2536,6 +2583,7 @@ PersoMinigame.prototype.openPrivateNote = function openPrivateNote(targetPersona
   this.progressDragRatio = 1;
   this.isFetchingContinuation = false;
   this.thinkingVisible = false;
+  this.thinkingPersona = "";
   this.pendingPrivateNote = null;
   this.resumeContinuationAfterNoteCancel = false;
   this.noteOverlayTarget = targetPersona;
@@ -2557,7 +2605,7 @@ PersoMinigame.prototype.queuePrivateNote = function queuePrivateNote(targetPerso
   this.resumeContinuationAfterNoteCancel = false;
   this.status = "generating";
   this.playbackPaused = false;
-  if (this.isLiveMessageComplete() && this.applyPendingPrivateNote()) return;
+  if (this.isLiveMessageReadyToAdvance() && this.applyPendingPrivateNote()) return;
   this.startPlaybackLoop();
   this.render();
 };
@@ -2567,12 +2615,13 @@ PersoMinigame.prototype.cancelPrivateNote = function cancelPrivateNote() {
   this.pendingPrivateNote = null;
   this.noteDraftText = "";
   this.editingNoteText = false;
+  this.thinkingPersona = "";
   if (this.mode === "participant" || this.status === "done") {
     this.render();
     return;
   }
 
-  if (this.isLiveMessageComplete()) {
+  if (this.isLiveMessageReadyToAdvance()) {
     this.resumeContinuationAfterPrivateNoteCancel();
   } else {
     this.resumeContinuationAfterNoteCancel = true;
@@ -2584,6 +2633,22 @@ PersoMinigame.prototype.cancelPrivateNote = function cancelPrivateNote() {
 PersoMinigame.prototype.isLiveMessageComplete = function isLiveMessageComplete() {
   var message = this.tableMessages[this.liveMessageIndex];
   return !!message && this.liveVisibleChars >= message.content.length;
+};
+
+PersoMinigame.prototype.isCurrentLiveTtsActive = function isCurrentLiveTtsActive() {
+  var message = this.tableMessages[this.liveMessageIndex];
+  if (!message || !this.ttsPlaybackKey || this.ttsPlaybackEnded) return false;
+  if (this.ttsPlaybackKey !== this.getTtsMessageKey(message, this.liveMessageIndex)) return false;
+  var audio = this.voiceAudioContext;
+  var duration = Number(audio && audio.duration);
+  if (!(duration > 0)) duration = Number(this.ttsPlaybackDuration);
+  var currentTime = Number(audio && audio.currentTime);
+  if (duration > 0 && currentTime >= duration - 0.08) return false;
+  return true;
+};
+
+PersoMinigame.prototype.isLiveMessageReadyToAdvance = function isLiveMessageReadyToAdvance() {
+  return this.isLiveMessageComplete() && !this.isCurrentLiveTtsActive();
 };
 
 PersoMinigame.prototype.applyPendingPrivateNote = function applyPendingPrivateNote() {
@@ -2627,6 +2692,7 @@ PersoMinigame.prototype.applyPrivateNote = function applyPrivateNote(targetPerso
   this.progressDragRatio = 1;
   this.isFetchingContinuation = false;
   this.thinkingVisible = false;
+  this.thinkingPersona = "";
   this.generationRequestId += 1;
 
   if (config.FORCE_MOCK_GENERATION || !normalizeOrigin(config.API_BASE_URL)) {
@@ -2651,6 +2717,12 @@ PersoMinigame.prototype.applyAtmosphereChange = function applyAtmosphereChange(n
   }
 
   var hadBufferedFuture = this.tableMessages.length > this.liveMessageIndex + 1;
+  var forcedFirstPersona = "";
+  if (hadBufferedFuture && this.tableMessages[this.liveMessageIndex + 1]) {
+    forcedFirstPersona = this.tableMessages[this.liveMessageIndex + 1].persona;
+  } else {
+    forcedFirstPersona = this.getNextPersonaAfter((this.tableMessages[this.liveMessageIndex] || {}).persona);
+  }
   if (hadBufferedFuture) {
     var visibleEnd = Math.min(this.liveMessageIndex + 1, this.tableMessages.length);
     this.tableMessages = this.tableMessages.slice(0, visibleEnd);
@@ -2662,16 +2734,19 @@ PersoMinigame.prototype.applyAtmosphereChange = function applyAtmosphereChange(n
   this.progressDragRatio = 1;
   this.isFetchingContinuation = false;
   this.thinkingVisible = false;
+  this.thinkingPersona = isPersona(forcedFirstPersona) ? forcedFirstPersona : "";
   this.generationRequestId += 1;
   this.status = "generating";
   this.playbackPaused = false;
-  if (this.isLiveMessageComplete()) {
+  if (this.isLiveMessageReadyToAdvance()) {
     this.liveHoldTicks = this.getBetweenMessageTicks();
     this.messageHoldTicks = this.getBetweenMessageTicks();
   }
 
   if (config.FORCE_MOCK_GENERATION || !normalizeOrigin(config.API_BASE_URL)) {
-    this.tableMessages.push(this.createAtmosphereMockMessage());
+    var mockMessage = this.createAtmosphereMockMessage();
+    if (isPersona(forcedFirstPersona)) mockMessage.persona = forcedFirstPersona;
+    this.tableMessages.push(mockMessage);
     this.messages = this.tableMessages;
     this.startPlaybackLoop();
     this.render();
@@ -2679,7 +2754,7 @@ PersoMinigame.prototype.applyAtmosphereChange = function applyAtmosphereChange(n
   }
 
   this.startPlaybackLoop();
-  this.requestContinuation(hadBufferedFuture, true);
+  this.requestContinuation(hadBufferedFuture, true, forcedFirstPersona);
   this.render();
 };
 
@@ -2695,6 +2770,8 @@ PersoMinigame.prototype.submitParticipantMessage = function submitParticipantMes
   var visibleEnd = Math.min(this.liveMessageIndex + 1, this.tableMessages.length);
   if (visibleEnd <= 0 && this.tableMessages.length) visibleEnd = 1;
   var historyBeforeUser = this.tableMessages.slice(0, visibleEnd);
+  var previousPersona = (historyBeforeUser[historyBeforeUser.length - 1] || {}).persona;
+  var forcedReplyPersona = this.getNextPersonaAfter(previousPersona);
   var userMessage = {
     persona: "user",
     content: text,
@@ -2709,7 +2786,7 @@ PersoMinigame.prototype.submitParticipantMessage = function submitParticipantMes
   this.tableMessages = historyBeforeUser.concat([userMessage]);
   this.messages = this.tableMessages;
   this.liveMessageIndex = this.tableMessages.length - 1;
-  this.liveVisibleChars = userMessage.content.length;
+  this.liveVisibleChars = 0;
   this.liveHoldTicks = 0;
   this.activeMessageIndex = this.liveMessageIndex;
   this.visibleChars = this.liveVisibleChars;
@@ -2725,16 +2802,17 @@ PersoMinigame.prototype.submitParticipantMessage = function submitParticipantMes
   this.playbackPaused = false;
   this.startPlaybackLoop();
   this.render();
-  this.requestParticipantTurn(historyBeforeUser, text);
+  this.requestParticipantTurn(historyBeforeUser, text, forcedReplyPersona);
 };
 
-PersoMinigame.prototype.requestParticipantTurn = function requestParticipantTurn(historyBeforeUser, userMessage) {
+PersoMinigame.prototype.requestParticipantTurn = function requestParticipantTurn(historyBeforeUser, userMessage, forcedFirstPersona) {
   var apiBaseUrl = normalizeOrigin(config.API_BASE_URL);
   var self = this;
   var requestId = ++this.generationRequestId;
 
   if (config.FORCE_MOCK_GENERATION || !apiBaseUrl) {
-    var mockMessages = this.createMockParticipantReply(userMessage);
+    var mockMessages = this.createMockParticipantReply(userMessage, forcedFirstPersona);
+    if (isPersona(forcedFirstPersona) && mockMessages.length) mockMessages[0].persona = forcedFirstPersona;
     for (var m = 0; m < mockMessages.length; m += 1) this.tableMessages.push(mockMessages[m]);
     this.messages = this.tableMessages;
     this.render();
@@ -2743,6 +2821,7 @@ PersoMinigame.prototype.requestParticipantTurn = function requestParticipantTurn
 
   this.isFetchingContinuation = true;
   this.thinkingVisible = true;
+  this.thinkingPersona = isPersona(forcedFirstPersona) ? forcedFirstPersona : "";
   this.render();
 
   this.tt.request({
@@ -2766,34 +2845,152 @@ PersoMinigame.prototype.requestParticipantTurn = function requestParticipantTurn
         : JSON.stringify(response.data || {});
       var nextMessages = statusCode >= 400 ? [] : parseRoundtableMessages(responseText);
 
+      if (!nextMessages.length) nextMessages = self.createMockParticipantReply(userMessage, forcedFirstPersona);
+      if (isPersona(forcedFirstPersona) && nextMessages.length) nextMessages[0].persona = forcedFirstPersona;
+      var shouldAdvanceFromUser = self.shouldAdvanceFromCompletedLiveMessage();
+      var firstReplyIndex = self.tableMessages.length;
       self.isFetchingContinuation = false;
       self.thinkingVisible = false;
-      if (!nextMessages.length) nextMessages = self.createMockParticipantReply(userMessage);
+      self.thinkingPersona = "";
       for (var i = 0; i < nextMessages.length; i += 1) {
         nextMessages[i].turn = self.tableMessages.length + 1;
         self.tableMessages.push(nextMessages[i]);
       }
       self.messages = self.tableMessages;
+      if (shouldAdvanceFromUser) self.advanceLiveMessageTo(firstReplyIndex);
       self.status = "generating";
       self.startPlaybackLoop();
       self.render();
     },
     fail: function fail(error) {
       if (requestId !== self.generationRequestId) return;
-      var fallbackMessages = self.createMockParticipantReply(userMessage);
+      var fallbackMessages = self.createMockParticipantReply(userMessage, forcedFirstPersona);
+      if (isPersona(forcedFirstPersona) && fallbackMessages.length) fallbackMessages[0].persona = forcedFirstPersona;
+      var shouldAdvanceFromUser = self.shouldAdvanceFromCompletedLiveMessage();
+      var firstReplyIndex = self.tableMessages.length;
       self.isFetchingContinuation = false;
       self.thinkingVisible = false;
+      self.thinkingPersona = "";
       if (isInvalidDomainError(error)) self.ttsError = formatNetworkFailMessage(error);
       for (var i = 0; i < fallbackMessages.length; i += 1) {
         fallbackMessages[i].turn = self.tableMessages.length + 1;
         self.tableMessages.push(fallbackMessages[i]);
       }
       self.messages = self.tableMessages;
+      if (shouldAdvanceFromUser) self.advanceLiveMessageTo(firstReplyIndex);
       self.status = "generating";
       self.startPlaybackLoop();
       self.render();
     }
   });
+};
+
+PersoMinigame.prototype.requestParticipantAutoContinuation = function requestParticipantAutoContinuation(showThinking) {
+  if (this.mode !== "participant" || this.isFetchingContinuation || this.status === "done") return;
+  var apiBaseUrl = normalizeOrigin(config.API_BASE_URL);
+  var self = this;
+  var current = this.tableMessages[this.liveMessageIndex] || {};
+  var forcedFirstPersona = this.getNextPersonaAfter(current.persona);
+  var requestId = ++this.generationRequestId;
+
+  if (config.FORCE_MOCK_GENERATION || !apiBaseUrl) {
+    var mockMessages = this.createMockParticipantAutoContinuation(forcedFirstPersona);
+    for (var m = 0; m < mockMessages.length; m += 1) this.tableMessages.push(mockMessages[m]);
+    this.messages = this.tableMessages;
+    this.status = "generating";
+    this.startPlaybackLoop();
+    this.render();
+    return;
+  }
+
+  this.isFetchingContinuation = true;
+  this.thinkingVisible = !!showThinking;
+  this.thinkingPersona = isPersona(forcedFirstPersona) ? forcedFirstPersona : "";
+  this.status = "generating";
+  this.render();
+
+  this.tt.request({
+    url: apiBaseUrl + "/api/chat",
+    method: "POST",
+    header: { "Content-Type": "application/json" },
+    data: {
+      topic: this.currentTopic().slice(0, 120),
+      mode: "participant",
+      phase: "continuation",
+      atmosphere: this.atmosphere,
+      personas: this.selected,
+      messages: this.tableMessages
+    },
+    success: function success(response) {
+      if (requestId !== self.generationRequestId) return;
+      var statusCode = response.statusCode || 200;
+      var responseText = typeof response.data === "string"
+        ? response.data
+        : JSON.stringify(response.data || {});
+      var nextMessages = statusCode >= 400 ? [] : parseRoundtableMessages(responseText);
+      if (!nextMessages.length) nextMessages = self.createMockParticipantAutoContinuation(forcedFirstPersona);
+      if (isPersona(forcedFirstPersona) && nextMessages.length) nextMessages[0].persona = forcedFirstPersona;
+      var shouldAdvanceFromCurrent = self.shouldAdvanceFromCompletedLiveMessage();
+      var firstNewIndex = self.tableMessages.length;
+      self.isFetchingContinuation = false;
+      self.thinkingVisible = false;
+      self.thinkingPersona = "";
+      for (var i = 0; i < nextMessages.length; i += 1) {
+        nextMessages[i].turn = self.tableMessages.length + 1;
+        self.tableMessages.push(nextMessages[i]);
+      }
+      self.messages = self.tableMessages;
+      if (shouldAdvanceFromCurrent) self.advanceLiveMessageTo(firstNewIndex);
+      self.status = "generating";
+      self.startPlaybackLoop();
+      self.render();
+    },
+    fail: function fail(error) {
+      if (requestId !== self.generationRequestId) return;
+      var fallbackMessages = self.createMockParticipantAutoContinuation(forcedFirstPersona);
+      var shouldAdvanceFromCurrent = self.shouldAdvanceFromCompletedLiveMessage();
+      var firstNewIndex = self.tableMessages.length;
+      self.isFetchingContinuation = false;
+      self.thinkingVisible = false;
+      self.thinkingPersona = "";
+      if (isInvalidDomainError(error)) self.ttsError = formatNetworkFailMessage(error);
+      for (var i = 0; i < fallbackMessages.length; i += 1) {
+        fallbackMessages[i].turn = self.tableMessages.length + 1;
+        self.tableMessages.push(fallbackMessages[i]);
+      }
+      self.messages = self.tableMessages;
+      if (shouldAdvanceFromCurrent) self.advanceLiveMessageTo(firstNewIndex);
+      self.status = "generating";
+      self.startPlaybackLoop();
+      self.render();
+    }
+  });
+};
+
+PersoMinigame.prototype.shouldAdvanceFromCompletedLiveMessage = function shouldAdvanceFromCompletedLiveMessage() {
+  var current = this.tableMessages[this.liveMessageIndex];
+  return (
+    this.isAtLiveEdge &&
+    current &&
+    this.liveMessageIndex >= this.tableMessages.length - 1 &&
+    this.isLiveMessageReadyToAdvance() &&
+    (this.isFetchingContinuation || this.thinkingVisible)
+  );
+};
+
+PersoMinigame.prototype.advanceLiveMessageTo = function advanceLiveMessageTo(index) {
+  if (index < 0 || index >= this.tableMessages.length) return;
+  this.stopVoiceAudio();
+  this.liveMessageIndex = index;
+  this.liveVisibleChars = 0;
+  this.liveHoldTicks = 0;
+  this.activeMessageIndex = this.liveMessageIndex;
+  this.visibleChars = this.liveVisibleChars;
+  this.messageHoldTicks = 0;
+  this.lastVoiceKey = "";
+  this.voiceMessageKey = "";
+  this.isAtLiveEdge = true;
+  this.progressDragRatio = 1;
 };
 
 PersoMinigame.prototype.requestPrivateNote = function requestPrivateNote(targetPersona, note, showThinking) {
@@ -2803,6 +3000,7 @@ PersoMinigame.prototype.requestPrivateNote = function requestPrivateNote(targetP
 
   this.isFetchingContinuation = true;
   this.thinkingVisible = !!showThinking;
+  this.thinkingPersona = targetPersona;
   this.status = "generating";
   this.playbackPaused = false;
   this.render();
@@ -2825,29 +3023,37 @@ PersoMinigame.prototype.requestPrivateNote = function requestPrivateNote(targetP
     },
     success: function success(response) {
       if (requestId !== self.generationRequestId) return;
-      self.isFetchingContinuation = false;
-      self.thinkingVisible = false;
       var statusCode = response.statusCode || 200;
       var responseText = typeof response.data === "string"
         ? response.data
         : JSON.stringify(response.data || {});
       var nextMessages = statusCode >= 400 ? [] : parseRoundtableMessages(responseText);
       if (!nextMessages.length) nextMessages = [self.createMockNoteMessage(targetPersona, note)];
+      var shouldAdvanceFromCurrent = self.shouldAdvanceFromCompletedLiveMessage();
+      var firstNewIndex = self.tableMessages.length;
+      self.isFetchingContinuation = false;
+      self.thinkingVisible = false;
+      self.thinkingPersona = "";
       nextMessages[0].persona = targetPersona;
       nextMessages[0].turn = self.tableMessages.length + 1;
       self.tableMessages.push(nextMessages[0]);
       self.messages = self.tableMessages;
+      if (shouldAdvanceFromCurrent) self.advanceLiveMessageTo(firstNewIndex);
       self.startPlaybackLoop();
       self.render();
       self.requestContinuation(false);
     },
     fail: function fail(error) {
       if (requestId !== self.generationRequestId) return;
+      var shouldAdvanceFromCurrent = self.shouldAdvanceFromCompletedLiveMessage();
+      var firstNewIndex = self.tableMessages.length;
       self.isFetchingContinuation = false;
       self.thinkingVisible = false;
+      self.thinkingPersona = "";
       if (isInvalidDomainError(error)) self.ttsError = formatNetworkFailMessage(error);
       self.tableMessages.push(self.createMockNoteMessage(targetPersona, note));
       self.messages = self.tableMessages;
+      if (shouldAdvanceFromCurrent) self.advanceLiveMessageTo(firstNewIndex);
       self.startPlaybackLoop();
       self.render();
     }
@@ -2872,16 +3078,15 @@ PersoMinigame.prototype.startPlaybackLoop = function startPlaybackLoop() {
     }
     self.prefetchUpcoming();
 
-    if (message.persona === "user" && self.liveVisibleChars < message.content.length) {
-      self.liveVisibleChars = message.content.length;
+    if (self.liveVisibleChars < message.content.length) {
+      var isTtsDriven = self.canUseTtsForMessage(message) && self.updateVisibleCharsFromTts(message, self.liveMessageIndex);
+      if (!isTtsDriven) self.liveVisibleChars += 1;
       if (self.isAtLiveEdge) self.syncDisplayToLive();
       self.render();
       return;
     }
 
-    if (self.liveVisibleChars < message.content.length) {
-      var isTtsDriven = self.canUseTtsForMessage(message) && self.updateVisibleCharsFromTts(message, self.liveMessageIndex);
-      if (!isTtsDriven) self.liveVisibleChars += 1;
+    if (self.isCurrentLiveTtsActive()) {
       if (self.isAtLiveEdge) self.syncDisplayToLive();
       self.render();
       return;
@@ -2920,9 +3125,8 @@ PersoMinigame.prototype.startPlaybackLoop = function startPlaybackLoop() {
     } else if (self.isFetchingContinuation) {
       self.status = "generating";
     } else if (self.mode === "participant") {
-      self.status = "waiting";
-      self.stopPlaybackLoop();
-      self.stopVoiceAudio();
+      self.requestParticipantAutoContinuation(true);
+      return;
     } else {
       self.finishRoundtableExperience();
       self.stopPlaybackLoop();
@@ -3753,20 +3957,21 @@ PersoMinigame.prototype.getThinkingBubbleState = function getThinkingBubbleState
   if (current && !content && this.ttsPendingKey === this.getTtsMessageKey(current, this.activeMessageIndex)) {
     return { speaker: speaker, content: text };
   }
-  if (this.mode === "participant" && current && current.persona === "user") return null;
+  if (this.mode === "participant" && current && current.persona === "user" && this.liveVisibleChars < current.content.length) return null;
   if (
     current &&
     this.liveMessageIndex >= this.tableMessages.length - 1 &&
-    this.liveVisibleChars >= current.content.length &&
+    this.isLiveMessageReadyToAdvance() &&
     (this.isFetchingContinuation || this.thinkingVisible)
   ) {
-    return { speaker: this.getNextPersonaAfter(current.persona), content: text };
+    return { speaker: this.thinkingPersona || this.getNextPersonaAfter(current.persona), content: text };
   }
   return null;
 };
 
 PersoMinigame.prototype.drawThinkingStatus = function drawThinkingStatus(ctx, stageBottom) {
   if (!this.thinkingVisible) return;
+  if (this.mode === "participant") return;
   var text = "思考中";
   var w = 92;
   var h = 28;

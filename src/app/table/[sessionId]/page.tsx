@@ -6,6 +6,8 @@ import { LoadingScreen } from "@/components/roundtable/LoadingScreen";
 import { PlaybackControls } from "@/components/roundtable/PlaybackControls";
 import { RoundTable } from "@/components/roundtable/RoundTable";
 import { ShareCard } from "@/components/roundtable/ShareCard";
+import { ShareOptions } from "@/components/roundtable/ShareOptions";
+import { ShareVideo } from "@/components/roundtable/ShareVideo";
 import { USER_INPUT_AREA_HEIGHT, UserInput } from "@/components/roundtable/UserInput";
 import { isPersonaId } from "@/lib/personaIds";
 import type { Atmosphere, MessageLabel, PersonaId, RoundtableMessage, Session } from "@/types";
@@ -26,6 +28,7 @@ const FOOTER_AREA_HEIGHT = 90;             // 实时控制栏（进度条 + 暂�
 const ATMOSPHERE_CONTROLS_AREA_HEIGHT = 48;
 const REPLAY_TICK_MS = 80;
 const REPLAY_CHAR_MS = TYPEWRITER_INTERVAL_MS / CHARS_PER_TICK;
+const TTS_TEXT_MAX_CHARS = 180;
 const SESSION_PERSONAS_KEY_PREFIX = "perso:session-personas:";
 const SESSION_TOPIC_KEY_PREFIX = "perso:session-topic:";
 const SESSION_LOAD_RETRY_DELAYS_MS = [250, 600, 1200];
@@ -444,6 +447,19 @@ function findLastPersonaMessage(messages: RoundtableMessage[]): RoundtableMessag
   return undefined;
 }
 
+function getTtsMessageKey(message: RoundtableMessage | null | undefined): string {
+  if (!message || !isPersonaId(message.persona) || !message.content.trim()) return "";
+  return `${message.id}:${message.persona}:${message.content}`;
+}
+
+function getTtsUrl(message: RoundtableMessage): string {
+  const params = new URLSearchParams({
+    persona: message.persona,
+    text: message.content.slice(0, TTS_TEXT_MAX_CHARS),
+  });
+  return `/api/tts?${params.toString()}`;
+}
+
 async function readResponseError(response: Response): Promise<string> {
   const text = await response.text();
   if (!text) return `请求失败（${response.status}）`;
@@ -677,6 +693,8 @@ export default function TablePage() {
   const [userInput, setUserInput] = useState("");
   const [hasOpened, setHasOpened] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
+  const [showShareOptions, setShowShareOptions] = useState(false);
+  const [showShareVideo, setShowShareVideo] = useState(false);
   const [isReplayPlaying, setIsReplayPlaying] = useState(false);
   const [replayIndex, setReplayIndex] = useState(0);
   const [loadingVisible, setLoadingVisible] = useState(true);
@@ -689,6 +707,8 @@ export default function TablePage() {
   const [atmosphere, setAtmosphere] = useState<Atmosphere>("plain");
   const [noteTarget, setNoteTarget] = useState<PersonaId | null>(null);
   const [noteText, setNoteText] = useState("");
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [voiceError, setVoiceError] = useState("");
   const [, bumpLiveProgress] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -719,6 +739,8 @@ export default function TablePage() {
   const privateNoteOpenRef = useRef(false);
   const resumeAfterPrivateNoteCancelRef = useRef(false);
   const resumeAfterPrivateNoteCancelRunnerRef = useRef<(() => void) | null>(null);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsPlayingKeyRef = useRef("");
 
   // 当前场景展示的活跃人格和气泡内容
   const lastMessage = messages[messages.length - 1];
@@ -756,7 +778,15 @@ export default function TablePage() {
       ? lastPersonaMessage?.content
       : status === "done" && replayIndex > 0
         ? replayDisplayContent
-        : undefined;
+      : undefined;
+
+  const sceneVoiceMessage: RoundtableMessage | null =
+    isUserSpeakerActive
+      ? null
+      : status === "done" && replayIndex > 0
+        ? fullMessagesRef.current[replayIndex - 1] ?? null
+        : currentRevealRef.current?.message ?? (isLiveStatus && isPersonaId(lastMessage?.persona) ? lastMessage : null);
+  const sceneVoiceKey = getTtsMessageKey(sceneVoiceMessage);
 
   useEffect(() => { statusRef.current = status; }, [status]);
   useEffect(() => { isReplayPlayingRef.current = isReplayPlaying; }, [isReplayPlaying]);
@@ -805,6 +835,72 @@ export default function TablePage() {
     setStreamDraft(null);
     stopStreamDraftRevealLoop();
   }, [stopStreamDraftRevealLoop]);
+
+  const stopTtsAudio = useCallback(() => {
+    const audio = ttsAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    }
+    ttsAudioRef.current = null;
+    ttsPlayingKeyRef.current = "";
+  }, []);
+
+  const pauseTtsAudio = useCallback(() => {
+    ttsAudioRef.current?.pause();
+  }, []);
+
+  const resumeTtsAudio = useCallback(() => {
+    const audio = ttsAudioRef.current;
+    if (!audio) return;
+    audio.play().catch(() => {
+      setVoiceError("点击声音按钮后可播放语音");
+    });
+  }, []);
+
+  const playTtsForMessage = useCallback((message: RoundtableMessage) => {
+    const key = getTtsMessageKey(message);
+    if (!key) return;
+    if (ttsPlayingKeyRef.current === key) {
+      resumeTtsAudio();
+      return;
+    }
+
+    stopTtsAudio();
+    const audio = new Audio(getTtsUrl(message));
+    audio.volume = 0.72;
+    audio.preload = "auto";
+    ttsAudioRef.current = audio;
+    ttsPlayingKeyRef.current = key;
+    setVoiceError("");
+
+    audio.play().catch(() => {
+      if (ttsPlayingKeyRef.current !== key) return;
+      setVoiceEnabled(false);
+      setVoiceError("点击声音按钮后可播放语音");
+      stopTtsAudio();
+    });
+  }, [resumeTtsAudio, stopTtsAudio]);
+
+  useEffect(() => {
+    if (!voiceEnabled) {
+      stopTtsAudio();
+      return;
+    }
+
+    if (status === "paused") {
+      pauseTtsAudio();
+      return;
+    }
+
+    if (status === "loading" || status === "waiting" || status === "error" || !sceneVoiceMessage || !sceneVoiceKey) {
+      stopTtsAudio();
+      return;
+    }
+
+    playTtsForMessage(sceneVoiceMessage);
+  }, [pauseTtsAudio, playTtsForMessage, sceneVoiceKey, sceneVoiceMessage, status, stopTtsAudio, voiceEnabled]);
 
   const isRevealIdle = useCallback(() => (
     currentRevealRef.current === null &&
@@ -1360,6 +1456,15 @@ export default function TablePage() {
     setLoadingVisible(false);
   }, []);
 
+  const handleVoiceToggle = useCallback(() => {
+    setVoiceError("");
+    setVoiceEnabled((current) => {
+      const next = !current;
+      if (!next) stopTtsAudio();
+      return next;
+    });
+  }, [stopTtsAudio]);
+
   function toggleReplay() {
     const total = getReplayTotalDuration(fullMessagesRef.current);
     if (isReplayPlaying) { setIsReplayPlaying(false); return; }
@@ -1373,7 +1478,8 @@ export default function TablePage() {
     stopReplayLoop();
     stopStreamDraftRevealLoop();
     clearUserSpeakerTimer();
-  }, [clearUserSpeakerTimer, stopRevealLoop, stopReplayLoop, stopStreamDraftRevealLoop]);
+    stopTtsAudio();
+  }, [clearUserSpeakerTimer, stopRevealLoop, stopReplayLoop, stopStreamDraftRevealLoop, stopTtsAudio]);
 
   useEffect(() => {
     if (!isReplayPlaying) { stopReplayLoop(); return; }
@@ -1474,35 +1580,58 @@ export default function TablePage() {
             {displayTopic}
           </p>
 
-          {status === "done" ? (
+          <div className="pointer-events-auto flex shrink-0 items-center justify-end gap-2" style={{ minWidth: 84 }}>
             <button
-              className="pointer-events-auto shrink-0"
               type="button"
-              onClick={() => setShowShareCard(true)}
+              onClick={handleVoiceToggle}
+              aria-label={voiceEnabled ? "关闭语音" : "开启语音"}
+              aria-pressed={voiceEnabled}
+              className="flex h-10 w-10 items-center justify-center"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/images/share.png"
-                alt="分享"
-                width={40}
-                height={40}
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none'
-                  const span = e.currentTarget.nextElementSibling as HTMLElement | null
-                  if (span) span.style.display = 'inline'
-                }}
+                src={voiceEnabled ? "/images/sound.svg" : "/images/no-sound.svg"}
+                alt=""
+                width={32}
+                height={32}
+                style={{ display: "block" }}
               />
-              <span className="hidden font-pixel text-white text-xl">&#8599;</span>
             </button>
-          ) : (
-            <div className="shrink-0" style={{ width: 40, height: 40 }} />
-          )}
+
+            {status === "done" ? (
+              <button
+                className="shrink-0"
+                type="button"
+                onClick={() => setShowShareOptions(true)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/images/share.png"
+                  alt="分享"
+                  width={40}
+                  height={40}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                    const span = e.currentTarget.nextElementSibling as HTMLElement | null
+                    if (span) span.style.display = 'inline'
+                  }}
+                />
+                <span className="hidden font-pixel text-white text-xl">&#8599;</span>
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {/* 错误提示 */}
         {error && (
           <div className="absolute bottom-4 left-4 right-4 rounded border border-red-900 bg-red-950/60 px-3 py-2 text-sm text-red-200">
             {error}
+          </div>
+        )}
+
+        {voiceError && !error && (
+          <div className="font-pixel absolute bottom-4 left-4 right-4 rounded border border-[#454545] bg-black/70 px-3 py-2 text-center text-[#B1FD00]" style={{ fontSize: 12 }}>
+            {voiceError}
           </div>
         )}
       </div>
@@ -1527,6 +1656,29 @@ export default function TablePage() {
           messages={fullMessagesRef.current}
           mode={session.mode}
           onClose={() => setShowShareCard(false)}
+        />
+      )}
+
+      {showShareOptions && (
+        <ShareOptions
+          onCard={() => {
+            setShowShareOptions(false);
+            setShowShareCard(true);
+          }}
+          onVideo={() => {
+            setShowShareOptions(false);
+            setShowShareVideo(true);
+          }}
+          onClose={() => setShowShareOptions(false)}
+        />
+      )}
+
+      {showShareVideo && session && (
+        <ShareVideo
+          topic={session.topic}
+          personas={session.personas}
+          messages={fullMessagesRef.current}
+          onClose={() => setShowShareVideo(false)}
         />
       )}
 

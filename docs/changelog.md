@@ -6,6 +6,7 @@
 
 ## Unreleased
 
+- 修复 Vercel 部署失败：收窄 `/api/tts-mp3/[persona]/speech.mp3` 路由 handler 的 `params` 类型，符合 Next.js 15 route handler 对第二参数的 build 校验。
 - 新增 H5 专用 TTS 静态文件形态接口 `/api/tts-mp3/[persona]/speech.mp3`，保留同样的 TTS 合成、CORS、`HEAD/Range` 支持；互动空间 H5 语音 URL 改为 `.mp3` 结尾，规避部分 WebView 对动态 query API 音频源报 `audio error 4` 的兼容问题。
 - 调整 `douyin-interactive-space/` 选择人格页顶部布局：H5 互动空间环境下内容起始位置从安全区预留改为更紧凑的 24px，减少顶部空白。
 - 增强 `douyin-interactive-space/` H5 音频播放兼容性：在用户触摸时主动解锁 WebView 音频播放权限，H5 Audio 设置 `crossOrigin=anonymous`，并把 media error code/message 透传到页面提示，便于定位测试版语音失败原因。

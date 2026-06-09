@@ -17,7 +17,7 @@ const corsHeaders = {
 };
 
 type RouteContext = {
-  params: Promise<{ persona: string }> | { persona: string };
+  params: Promise<{ persona: string }>;
 };
 
 function normalizeText(value: string): string {

@@ -420,16 +420,21 @@ function PersoMinigame() {
   this.sidebarPromptSeen = false;
   this.shareOverlayVisible = false;
   this.shareCardPreviewVisible = false;
+  this.shareCardNotice = "";
   this.settingsOverlayVisible = false;
   this.shareVideoState = "idle";
   this.shareVideoMessages = [];
   this.shareVideoStartedAt = 0;
+  this.shareVideoPreviewStartedAt = 0;
+  this.shareVideoPreviewElapsed = 0;
+  this.shareVideoPreviewPlaying = false;
   this.shareVideoDurationMs = 0;
   this.shareVideoFrameTimer = null;
   this.shareVideoStopTimer = null;
   this.shareVideoRecorder = null;
   this.shareVideoRunId = 0;
   this.shareVideoError = "";
+  this.shareVideoNotice = "";
   this.shareVideoVoiceKey = "";
   this.shareVideoResultPath = "";
   if (this.tt.getStorageSync) {
@@ -1129,6 +1134,7 @@ PersoMinigame.prototype.toggleBgm = function toggleBgm() {
 PersoMinigame.prototype.exitToSelection = function exitToSelection() {
   this.stopLoadingLoop();
   this.stopPlaybackLoop();
+  this.clearShareVideoTimers();
   this.stopVoiceAudio();
   this.stopBgm();
   this.page = "selection";
@@ -1140,6 +1146,12 @@ PersoMinigame.prototype.exitToSelection = function exitToSelection() {
   this.sidebarPromptVisible = false;
   this.shareOverlayVisible = false;
   this.shareCardPreviewVisible = false;
+  this.shareCardNotice = "";
+  this.shareVideoState = "idle";
+  this.shareVideoPreviewPlaying = false;
+  this.shareVideoPreviewElapsed = 0;
+  this.shareVideoNotice = "";
+  this.shareVideoError = "";
   this.settingsOverlayVisible = false;
   this.noteOverlayTarget = null;
   this.pendingPrivateNote = null;
@@ -1265,7 +1277,7 @@ PersoMinigame.prototype.playMessageTtsIfNeeded = function playMessageTtsIfNeeded
     return true;
   }
 
-  if (this.tt.downloadFile) {
+  if (this.tt.downloadFile && !this.tt.isBrowserAdapter) {
     this.downloadAndPlayTts(audioUrl, key, messageIndex);
     return true;
   }
@@ -1297,7 +1309,19 @@ PersoMinigame.prototype.playTtsAudioSource = function playTtsAudioSource(src, ke
     this.ttsPlaybackReady = false;
     this.ttsPlaybackEnded = false;
     if (this.playbackPaused && this.shareVideoState !== "recording") return;
-    audio.play();
+    var playResult = audio.play();
+    if (playResult && typeof playResult.catch === "function") {
+      var self = this;
+      playResult.catch(function onAudioPlayRejected(error) {
+        if (self.voiceMessageKey !== key && self.ttsPlaybackKey !== key) return;
+        self.ttsFailedKeys[key] = true;
+        self.ttsPendingKey = "";
+        self.ttsPlaybackKey = "";
+        self.ttsPlaybackMessageIndex = -1;
+        self.ttsError = error && error.message ? error.message + "，已切回文字播放" : "语音播放失败，已切回文字播放";
+        self.render();
+      });
+    }
     this.ttsError = "";
   } catch (error) {
     this.ttsFailedKeys[key] = true;
@@ -1643,6 +1667,9 @@ PersoMinigame.prototype.openShareOptions = function openShareOptions() {
     return;
   }
   this.shareVideoError = "";
+  this.shareVideoNotice = "";
+  this.shareVideoPreviewPlaying = false;
+  this.shareCardNotice = "";
   this.shareOverlayVisible = true;
 };
 
@@ -1651,15 +1678,104 @@ PersoMinigame.prototype.formatShareError = function formatShareError(prefix, err
   return message ? prefix + "：" + message : prefix;
 };
 
-PersoMinigame.prototype.shareCard = function shareCard() {
-  if (!this.tt.shareAppMessage) {
-    this.error = "当前环境不支持分享卡片";
+PersoMinigame.prototype.getShareCardFileName = function getShareCardFileName() {
+  var topic = this.currentTopic().slice(0, 18).replace(/[\\/:*?"<>|\s]+/g, "-");
+  return "perso-card" + (topic ? "-" + topic : "") + ".png";
+};
+
+PersoMinigame.prototype.downloadDataUrl = function downloadDataUrl(dataUrl, fileName) {
+  if (typeof document === "undefined") return false;
+  var link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = fileName;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  return true;
+};
+
+PersoMinigame.prototype.dataUrlToBlob = function dataUrlToBlob(dataUrl) {
+  var parts = dataUrl.split(",");
+  var mimeMatch = parts[0].match(/data:([^;]+);base64/);
+  var mime = mimeMatch ? mimeMatch[1] : "image/png";
+  var binary = atob(parts[1] || "");
+  var bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+};
+
+PersoMinigame.prototype.shareCardImageFallback = function shareCardImageFallback() {
+  if (typeof document === "undefined") {
+    this.error = "当前环境不支持生成分享卡片";
     this.render();
     return;
   }
+
+  try {
+    var scale = Math.min(3, Math.max(2, this.pixelRatio || (typeof window !== "undefined" ? window.devicePixelRatio : 2) || 2));
+    var cardCanvas = document.createElement("canvas");
+    var cardCtx = cardCanvas.getContext("2d");
+    cardCanvas.width = Math.round(360 * scale);
+    cardCanvas.height = Math.round(480 * scale);
+    this.drawH5StyleShareCard(cardCtx, 0, 0, scale);
+
+    var dataUrl = cardCanvas.toDataURL("image/png");
+    var fileName = this.getShareCardFileName();
+    if (typeof navigator !== "undefined" && navigator.share && typeof File !== "undefined") {
+      try {
+        var blob = this.dataUrlToBlob(dataUrl);
+        var file = new File([blob], fileName, { type: "image/png" });
+        var payload = {
+          files: [file],
+          title: "Perso 人格圆桌",
+          text: "来听人格圆桌怎么聊"
+        };
+        if (!navigator.canShare || navigator.canShare(payload)) {
+          var self = this;
+          this.error = "";
+          this.shareCardNotice = "正在打开分享面板";
+          this.render();
+          navigator.share(payload).then(function onShareSuccess() {
+            self.shareCardNotice = "分享卡片已发送";
+            self.render();
+          }).catch(function onShareFail(error) {
+            if (error && error.name === "AbortError") {
+              self.shareCardNotice = "";
+            } else if (self.downloadDataUrl(dataUrl, fileName)) {
+              self.shareCardNotice = "已生成分享卡片图片";
+            } else {
+              self.error = self.formatShareError("分享卡片失败", error);
+            }
+            self.render();
+          });
+          return;
+        }
+      } catch (shareError) {}
+    }
+
+    var didDownload = this.downloadDataUrl(dataUrl, fileName);
+    if (didDownload) {
+      this.error = "";
+      this.shareCardNotice = "已生成分享卡片图片";
+    } else {
+      this.error = "当前环境不支持下载分享卡片";
+    }
+  } catch (error) {
+    this.error = this.formatShareError("生成分享卡片失败", error);
+  }
+  this.render();
+};
+
+PersoMinigame.prototype.shareCard = function shareCard() {
+  if (!this.tt.shareAppMessage) {
+    this.shareCardImageFallback();
+    return;
+  }
   if (!config.SHARE_TEMPLATE_ID) {
-    this.error = "先在 js/config.js 配置 SHARE_TEMPLATE_ID";
-    this.render();
+    this.shareCardImageFallback();
     return;
   }
 
@@ -1712,25 +1828,18 @@ PersoMinigame.prototype.prepareShareVideoTimeline = function prepareShareVideoTi
   return trimmed.length ? trimmed : messages.slice(0, 1);
 };
 
-PersoMinigame.prototype.startShareVideo = function startShareVideo() {
-  if (!this.tt.getGameRecorderManager) {
-    this.shareOverlayVisible = true;
-    this.shareVideoError = "当前环境不支持录屏分享，请用真机或新版开发者工具测试";
-    this.render();
-    return;
-  }
-
+PersoMinigame.prototype.openShareVideoPreview = function openShareVideoPreview() {
   var messages = this.prepareShareVideoTimeline(this.getVisibleShareMessages());
   if (!messages.length) {
     this.shareOverlayVisible = true;
-    this.shareVideoError = "还没有可录制的对话";
+    this.shareVideoError = "还没有可分享的对话";
     this.render();
     return;
   }
 
   this.stopPlaybackLoop();
   this.stopVoiceAudio();
-  this.setBgmDucked(true);
+  this.setBgmDucked(false);
   this.shareOverlayVisible = false;
   this.shareVideoMessages = messages;
   this.shareVideoDurationMs = 0;
@@ -1738,10 +1847,40 @@ PersoMinigame.prototype.startShareVideo = function startShareVideo() {
     this.shareVideoDurationMs += this.getShareMessageDuration(messages[i]);
     this.prefetchTtsForMessage(messages[i], i);
   }
+  this.shareVideoState = "preview";
+  this.shareVideoPreviewStartedAt = 0;
+  this.shareVideoPreviewElapsed = Math.min(180, Math.max(0, this.shareVideoDurationMs - 1));
+  this.shareVideoPreviewPlaying = false;
+  this.shareVideoError = "";
+  this.shareVideoNotice = "";
+  this.shareVideoVoiceKey = "";
+  this.shareVideoResultPath = "";
+  this.render();
+};
+
+PersoMinigame.prototype.startShareVideo = function startShareVideo() {
+  this.openShareVideoPreview();
+};
+
+PersoMinigame.prototype.startShareVideoExport = function startShareVideoExport() {
+  if (!this.shareVideoMessages.length) {
+    this.openShareVideoPreview();
+    return;
+  }
+
+  if (!this.tt.getGameRecorderManager) {
+    this.recordShareVideoWithMediaRecorder();
+    return;
+  }
+
+  this.pauseShareVideoPreview();
+  this.stopVoiceAudio();
+  this.setBgmDucked(true);
   this.shareVideoState = "recording";
   this.shareVideoStartedAt = Date.now();
   this.shareVideoRunId += 1;
   this.shareVideoError = "";
+  this.shareVideoNotice = "正在生成视频";
   this.shareVideoVoiceKey = "";
   this.render();
 
@@ -1762,16 +1901,22 @@ PersoMinigame.prototype.startShareVideo = function startShareVideo() {
     recorder.onStop(function onRecorderStop(response) {
       if (self.shareVideoRunId !== runId) return;
       self.clearShareVideoTimers();
-      self.shareVideoState = "ready";
+      self.shareVideoState = "preview";
+      self.shareVideoPreviewPlaying = false;
+      self.shareVideoPreviewElapsed = 0;
       self.shareVideoError = "";
+      self.shareVideoNotice = "";
       self.setBgmDucked(false);
       var videoPath = response && (response.videoPath || response.tempFilePath);
       if (videoPath) {
         self.shareVideoResultPath = videoPath;
-        self.render();
+        if (self.tt.shareAppMessage && config.SHARE_VIDEO_TEMPLATE_ID) {
+          self.shareRecordedVideo(videoPath);
+        } else {
+          self.saveRecordedVideo(videoPath);
+        }
       } else {
-        self.shareVideoState = "idle";
-        self.error = "视频生成失败";
+        self.shareVideoError = "视频生成失败";
         self.render();
       }
     });
@@ -1781,10 +1926,9 @@ PersoMinigame.prototype.startShareVideo = function startShareVideo() {
     recorder.onError(function onRecorderError(error) {
       if (self.shareVideoRunId !== runId) return;
       self.clearShareVideoTimers();
-      self.shareVideoState = "idle";
-      self.shareVideoError = "";
+      self.shareVideoState = "preview";
+      self.shareVideoError = error && error.errMsg ? error.errMsg : "录屏失败";
       self.setBgmDucked(false);
-      self.error = error && error.errMsg ? error.errMsg : "录屏失败";
       self.render();
     });
   }
@@ -1794,8 +1938,7 @@ PersoMinigame.prototype.startShareVideo = function startShareVideo() {
       duration: Math.ceil((this.shareVideoDurationMs + 1200) / 1000)
     });
   } catch (error) {
-    this.shareVideoState = "idle";
-    this.shareOverlayVisible = true;
+    this.shareVideoState = "preview";
     this.shareVideoError = error && error.errMsg ? error.errMsg : "录屏启动失败，请用真机测试";
     this.setBgmDucked(false);
     this.render();
@@ -1813,10 +1956,9 @@ PersoMinigame.prototype.startShareVideo = function startShareVideo() {
       recorder.stop();
     } catch (error) {
       self.clearShareVideoTimers();
-      self.shareVideoState = "idle";
-      self.shareVideoError = "";
+      self.shareVideoState = "preview";
+      self.shareVideoError = "录屏停止失败";
       self.setBgmDucked(false);
-      self.error = "录屏停止失败";
       self.render();
     }
   }, this.shareVideoDurationMs);
@@ -1833,14 +1975,196 @@ PersoMinigame.prototype.clearShareVideoTimers = function clearShareVideoTimers()
   }
 };
 
+PersoMinigame.prototype.playShareVideoPreview = function playShareVideoPreview() {
+  var self = this;
+  if (this.shareVideoState !== "preview" || !this.shareVideoMessages.length) return;
+  this.clearShareVideoTimers();
+  this.stopVoiceAudio();
+  this.shareVideoPreviewPlaying = true;
+  this.shareVideoPreviewStartedAt = Date.now() - this.shareVideoPreviewElapsed;
+  this.shareVideoFrameTimer = setInterval(function tickShareVideoPreview() {
+    if (self.shareVideoState !== "preview" || !self.shareVideoPreviewPlaying) return;
+    self.shareVideoPreviewElapsed = Date.now() - self.shareVideoPreviewStartedAt;
+    if (self.shareVideoPreviewElapsed >= self.shareVideoDurationMs) {
+      self.shareVideoPreviewElapsed = Math.max(0, self.shareVideoDurationMs - 1);
+      self.shareVideoPreviewPlaying = false;
+      self.clearShareVideoTimers();
+    }
+    self.render();
+  }, 80);
+  this.render();
+};
+
+PersoMinigame.prototype.pauseShareVideoPreview = function pauseShareVideoPreview() {
+  if (this.shareVideoState !== "preview") return;
+  if (this.shareVideoPreviewPlaying) {
+    this.shareVideoPreviewElapsed = Date.now() - this.shareVideoPreviewStartedAt;
+  }
+  this.shareVideoPreviewElapsed = clamp(this.shareVideoPreviewElapsed, 0, Math.max(0, this.shareVideoDurationMs - 1));
+  this.shareVideoPreviewPlaying = false;
+  this.clearShareVideoTimers();
+  this.stopVoiceAudio();
+  this.render();
+};
+
+PersoMinigame.prototype.toggleShareVideoPreviewPlayback = function toggleShareVideoPreviewPlayback() {
+  if (this.shareVideoPreviewPlaying) this.pauseShareVideoPreview();
+  else this.playShareVideoPreview();
+};
+
+PersoMinigame.prototype.getShareVideoFileName = function getShareVideoFileName() {
+  var topic = this.currentTopic().slice(0, 18).replace(/[\\/:*?"<>|\s]+/g, "-");
+  return "perso-video" + (topic ? "-" + topic : "") + ".webm";
+};
+
+PersoMinigame.prototype.downloadBlobUrl = function downloadBlobUrl(url, fileName) {
+  if (typeof document === "undefined" || !url) return false;
+  var link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  return true;
+};
+
+PersoMinigame.prototype.recordShareVideoWithMediaRecorder = function recordShareVideoWithMediaRecorder() {
+  var recordCanvas;
+  var recordCtx;
+  var stream;
+  var recorder;
+  var chunks = [];
+  var options = {};
+  var self = this;
+  var runId;
+
+  if (typeof document === "undefined" || typeof MediaRecorder === "undefined") {
+    this.shareVideoError = "当前环境不支持生成视频";
+    this.shareVideoNotice = "";
+    this.render();
+    return;
+  }
+
+  this.pauseShareVideoPreview();
+  this.stopVoiceAudio();
+  this.setBgmDucked(true);
+  this.shareVideoState = "recording";
+  this.shareVideoStartedAt = Date.now();
+  this.shareVideoRunId += 1;
+  this.shareVideoError = "";
+  this.shareVideoNotice = "正在生成视频";
+  this.shareVideoVoiceKey = "";
+  runId = this.shareVideoRunId;
+
+  try {
+    recordCanvas = document.createElement("canvas");
+    recordCanvas.width = this.width * this.pixelRatio;
+    recordCanvas.height = this.height * this.pixelRatio;
+    recordCtx = recordCanvas.getContext("2d");
+    recordCtx.scale(this.pixelRatio, this.pixelRatio);
+    recordCtx.imageSmoothingEnabled = false;
+    this.drawShareVideoFrameToContext(recordCtx, 0);
+    if (!recordCanvas.captureStream) throw new Error("captureStream unavailable");
+    stream = recordCanvas.captureStream(30);
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
+      options.mimeType = "video/webm;codecs=vp9";
+    } else if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
+      options.mimeType = "video/webm;codecs=vp8";
+    }
+    recorder = new MediaRecorder(stream, options);
+  } catch (error) {
+    this.shareVideoState = "preview";
+    this.shareVideoError = this.formatShareError("视频生成失败", error);
+    this.shareVideoNotice = "";
+    this.setBgmDucked(false);
+    this.render();
+    return;
+  }
+
+  this.shareVideoRecorder = recorder;
+  recorder.ondataavailable = function onDataAvailable(event) {
+    if (event.data && event.data.size > 0) chunks.push(event.data);
+  };
+  recorder.onerror = function onMediaRecorderError(error) {
+    if (self.shareVideoRunId !== runId) return;
+    self.clearShareVideoTimers();
+    self.shareVideoState = "preview";
+    self.shareVideoPreviewPlaying = false;
+    self.shareVideoError = self.formatShareError("视频生成失败", error);
+    self.shareVideoNotice = "";
+    self.setBgmDucked(false);
+    self.render();
+  };
+  recorder.onstop = function onMediaRecorderStop() {
+    if (self.shareVideoRunId !== runId) return;
+    self.clearShareVideoTimers();
+    self.shareVideoState = "preview";
+    self.shareVideoPreviewPlaying = false;
+    self.shareVideoPreviewElapsed = 0;
+    self.setBgmDucked(false);
+
+    if (!chunks.length) {
+      self.shareVideoError = "视频生成失败";
+      self.shareVideoNotice = "";
+      self.render();
+      return;
+    }
+
+    var blob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+    var url = URL.createObjectURL(blob);
+    self.shareVideoResultPath = url;
+    if (self.downloadBlobUrl(url, self.getShareVideoFileName())) {
+      self.shareVideoError = "";
+      self.shareVideoNotice = "已生成视频文件";
+      self.exitToSelection();
+    } else {
+      self.shareVideoError = "当前环境不支持保存视频";
+      self.shareVideoNotice = "";
+      self.render();
+    }
+  };
+
+  try {
+    recorder.start();
+  } catch (error) {
+    this.shareVideoState = "preview";
+    this.shareVideoError = this.formatShareError("视频生成失败", error);
+    this.shareVideoNotice = "";
+    this.setBgmDucked(false);
+    this.render();
+    return;
+  }
+
+  this.render();
+  this.shareVideoFrameTimer = setInterval(function tickShareVideoRecording() {
+    if (self.shareVideoRunId !== runId || self.shareVideoState !== "recording") return;
+    self.drawShareVideoFrameToContext(recordCtx, Date.now() - self.shareVideoStartedAt);
+    self.render();
+  }, 80);
+  this.shareVideoStopTimer = setTimeout(function stopShareVideoRecording() {
+    if (self.shareVideoRunId !== runId || self.shareVideoState !== "recording") return;
+    try {
+      recorder.stop();
+    } catch (error) {
+      self.clearShareVideoTimers();
+      self.shareVideoState = "preview";
+      self.shareVideoError = self.formatShareError("视频生成失败", error);
+      self.shareVideoNotice = "";
+      self.setBgmDucked(false);
+      self.render();
+    }
+  }, this.shareVideoDurationMs);
+};
+
 PersoMinigame.prototype.shareRecordedVideo = function shareRecordedVideo(videoPath) {
   if (!this.tt.shareAppMessage) {
-    this.error = "视频已生成，但当前环境不支持分享";
+    this.shareVideoError = "视频已生成，但当前环境不支持分享";
     this.render();
     return;
   }
   if (!config.SHARE_VIDEO_TEMPLATE_ID) {
-    this.error = "视频已生成；先在 js/config.js 配置 SHARE_VIDEO_TEMPLATE_ID";
+    this.shareVideoError = "视频已生成；先在 js/config.js 配置 SHARE_VIDEO_TEMPLATE_ID";
     this.render();
     return;
   }
@@ -1858,31 +2182,39 @@ PersoMinigame.prototype.shareRecordedVideo = function shareRecordedVideo(videoPa
       },
       success: function success() {
         self.error = "";
+        self.shareVideoError = "";
+        self.shareVideoNotice = "分享视频已发送";
         self.shareOverlayVisible = false;
-        self.render();
+        self.exitToSelection();
       },
       fail: function fail(error) {
         self.shareOverlayVisible = true;
-        self.error = self.formatShareError("视频分享失败", error);
+        self.shareVideoError = self.formatShareError("视频分享失败", error);
         self.render();
       }
     });
   } catch (error) {
     this.shareOverlayVisible = true;
-    this.error = this.formatShareError("视频分享失败", error);
+    this.shareVideoError = this.formatShareError("视频分享失败", error);
     this.render();
   }
 };
 
 PersoMinigame.prototype.saveRecordedVideo = function saveRecordedVideo(videoPath) {
   if (!videoPath) {
-    this.error = "没有可保存的视频";
+    this.shareVideoError = "没有可保存的视频";
     this.render();
     return;
   }
   if (!this.tt.saveVideoToPhotosAlbum) {
-    this.error = "当前环境不支持保存视频";
-    this.render();
+    if (this.downloadBlobUrl(videoPath, this.getShareVideoFileName())) {
+      this.shareVideoError = "";
+      this.shareVideoNotice = "已生成视频文件";
+      this.exitToSelection();
+    } else {
+      this.shareVideoError = "当前环境不支持保存视频";
+      this.render();
+    }
     return;
   }
 
@@ -1891,18 +2223,51 @@ PersoMinigame.prototype.saveRecordedVideo = function saveRecordedVideo(videoPath
     this.tt.saveVideoToPhotosAlbum({
       filePath: videoPath,
       success: function success() {
-        self.error = "视频已保存";
-        self.render();
+        self.error = "";
+        self.shareVideoError = "";
+        self.shareVideoNotice = "视频已保存";
+        self.exitToSelection();
       },
       fail: function fail(error) {
-        self.error = self.formatShareError("保存视频失败", error);
+        self.shareVideoError = self.formatShareError("保存视频失败", error);
         self.render();
       }
     });
   } catch (error) {
-    this.error = this.formatShareError("保存视频失败", error);
+    this.shareVideoError = this.formatShareError("保存视频失败", error);
     this.render();
   }
+};
+
+PersoMinigame.prototype.closeShareVideoPreview = function closeShareVideoPreview() {
+  this.pauseShareVideoPreview();
+  this.clearShareVideoTimers();
+  this.stopVoiceAudio();
+  this.shareVideoState = "idle";
+  this.shareVideoResultPath = "";
+  this.shareVideoNotice = "";
+  this.shareVideoError = "";
+  this.render();
+};
+
+PersoMinigame.prototype.handleShareVideoPreviewTap = function handleShareVideoPreviewTap(x, y) {
+  if (this.hit(this.rects.shareVideoPlay, x, y)) {
+    this.toggleShareVideoPreviewPlayback();
+    return true;
+  }
+  if (this.hit(this.rects.shareVideoConfirm, x, y)) {
+    this.startShareVideoExport();
+    return true;
+  }
+  if (this.hit(this.rects.shareVideoToSelection, x, y)) {
+    this.exitToSelection();
+    return true;
+  }
+  if (this.hit(this.rects.shareVideoBack, x, y)) {
+    this.closeShareVideoPreview();
+    return true;
+  }
+  return true;
 };
 
 PersoMinigame.prototype.handleShareVideoResultTap = function handleShareVideoResultTap(x, y) {
@@ -2124,7 +2489,7 @@ PersoMinigame.prototype.prepareRoundtable = function prepareRoundtable(messages)
   var audioUrl = this.getTtsAudioUrl(first);
   var audio = first && this.canUseTtsForMessage(first);
 
-  if (!audio || !key || !audioUrl || this.ttsAudioCache[key] || !this.tt.downloadFile) {
+  if (!audio || !key || !audioUrl || this.ttsAudioCache[key] || !this.tt.downloadFile || this.tt.isBrowserAdapter) {
     this.openRoundtable(messages);
     return;
   }
@@ -2165,7 +2530,7 @@ PersoMinigame.prototype.prefetchTtsForMessage = function prefetchTtsForMessage(m
   var key = this.getTtsMessageKey(message, messageIndex);
   var audioUrl = this.getTtsAudioUrl(message);
   if (!key || !audioUrl || this.ttsAudioCache[key] || this.ttsFailedKeys[key] || this.ttsPrefetchingKeys[key]) return;
-  if (!this.canUseTtsForMessage(message) || !this.tt.downloadFile) return;
+  if (!this.canUseTtsForMessage(message) || !this.tt.downloadFile || this.tt.isBrowserAdapter) return;
 
   this.ttsPrefetchingKeys[key] = true;
   this.tt.downloadFile({
@@ -3288,6 +3653,7 @@ PersoMinigame.prototype.handleRoundtableTap = function handleRoundtableTap(x, y)
     if (this.hit(this.rects.shareCardBack, x, y)) {
       this.shareCardPreviewVisible = false;
       this.shareOverlayVisible = true;
+      this.shareCardNotice = "";
       this.render();
       return;
     }
@@ -3298,6 +3664,7 @@ PersoMinigame.prototype.handleRoundtableTap = function handleRoundtableTap(x, y)
     if (this.hit(this.rects.shareCard, x, y)) {
       this.shareOverlayVisible = false;
       this.shareCardPreviewVisible = true;
+      this.shareCardNotice = "";
       this.render();
       return;
     }
@@ -3315,6 +3682,10 @@ PersoMinigame.prototype.handleRoundtableTap = function handleRoundtableTap(x, y)
   }
 
   if (this.shareVideoState === "recording") return;
+  if (this.shareVideoState === "preview") {
+    this.handleShareVideoPreviewTap(x, y);
+    return;
+  }
   if (this.shareVideoState === "ready") {
     this.handleShareVideoResultTap(x, y);
     return;
@@ -3464,7 +3835,11 @@ PersoMinigame.prototype.render = function render() {
 
   if (this.page === "roundtable") {
     if (this.shareVideoState === "recording") {
-      this.drawShareVideoScene(ctx);
+      this.drawShareVideoSavingPage(ctx);
+      return;
+    }
+    if (this.shareVideoState === "preview") {
+      this.drawShareVideoPreviewPage(ctx);
       return;
     }
     if (this.shareVideoState === "ready") {
@@ -4145,10 +4520,10 @@ PersoMinigame.prototype.drawShareOptions = function drawShareOptions(ctx) {
   ctx.textAlign = "center";
   ctx.fillText("分享这场圆桌", this.width / 2, y + 38);
 
-  ctx.fillStyle = this.shareVideoError ? "#FFC700" : "#D3D1D1";
+  ctx.fillStyle = "#D3D1D1";
   ctx.font = this.pixelFont(12);
   var messageY = y + 68;
-  var lines = wrapText(ctx, this.shareVideoError || "选择卡片快速分享，或生成一段对话回放视频。", w - 42, 2);
+  var lines = wrapText(ctx, "选择卡片快速分享，或预览一段对话回放视频。", w - 42, 2);
   for (var i = 0; i < lines.length; i += 1) {
     ctx.fillText(lines[i], this.width / 2, messageY + i * 18);
   }
@@ -4342,16 +4717,16 @@ PersoMinigame.prototype.drawH5StyleShareCard = function drawH5StyleShareCard(ctx
   var cardW = 294;
   var cardH = 393;
   var slotStyles = [
-    { rotation: -34.5, offsetX: -27, offsetY: 2, badgeWidth: 100, circleSize: 90, circleOffsetX: 0, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: -34.5 },
-    { rotation: 0, offsetX: -27, offsetY: -14, badgeWidth: 70, circleSize: 64, circleOffsetX: 14, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 },
-    { rotation: 0, offsetX: -33, offsetY: -16, badgeWidth: 80, circleSize: 70, circleOffsetX: 8, circleOffsetY: 10, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 },
-    { rotation: -20, offsetX: -32, offsetY: -4, badgeWidth: 94, circleSize: 80, circleOffsetX: 0, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 }
+    { rotation: -34.5, offsetX: -35, offsetY: 5, badgeWidth: 100, circleSize: 90, circleOffsetX: -8, circleOffsetY: -4, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: -34.5 },
+    { rotation: 0, offsetX: -34, offsetY: -14, badgeWidth: 70, circleSize: 64, circleOffsetX: 14, circleOffsetY: 6, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 },
+    { rotation: 0, offsetX: -35, offsetY: -16, badgeWidth: 80, circleSize: 70, circleOffsetX: 8, circleOffsetY: 10, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 },
+    { rotation: -20, offsetX: -38, offsetY: -4, badgeWidth: 94, circleSize: 80, circleOffsetX: 0, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 }
   ];
   var compactSlotStyles = [
-    { rotation: -30, offsetX: -38, offsetY: -2, badgeWidth: 84, circleSize: 78, circleOffsetX: 2, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: -30 },
-    { rotation: 0, offsetX: -30, offsetY: -14, badgeWidth: 66, circleSize: 62, circleOffsetX: 12, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 },
-    { rotation: 0, offsetX: -33, offsetY: -14, badgeWidth: 70, circleSize: 64, circleOffsetX: 10, circleOffsetY: 6, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 },
-    { rotation: -16, offsetX: -33, offsetY: -5, badgeWidth: 78, circleSize: 72, circleOffsetX: 2, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 }
+    { rotation: -34.5, offsetX: -25, offsetY: 6, badgeWidth: 95, circleSize: 78, circleOffsetX: 2, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: -30 },
+    { rotation: 0, offsetX: -25, offsetY: -14, badgeWidth: 66, circleSize: 62, circleOffsetX: 12, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 },
+    { rotation: 0, offsetX: -27, offsetY: -14, badgeWidth: 70, circleSize: 64, circleOffsetX: 10, circleOffsetY: 6, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 },
+    { rotation: -16, offsetX: -28, offsetY: -13, badgeWidth: 78, circleSize: 72, circleOffsetX: 2, circleOffsetY: 0, avatarScale: 1.05, avatarOffsetX: 0, avatarOffsetY: 0, avatarRotation: 0 }
   ];
   var compactSlotPositions = [
     { x: 34, y: 132 },
@@ -4450,6 +4825,13 @@ PersoMinigame.prototype.drawShareCardPreview = function drawShareCardPreview(ctx
 
   this.drawH5StyleShareCard(ctx, frameX, frameY, frameScale);
 
+  if (this.shareCardNotice) {
+    ctx.fillStyle = "#B1FD00";
+    ctx.font = this.pixelFont(12);
+    ctx.textAlign = "center";
+    ctx.fillText(this.shareCardNotice, this.width / 2, buttonY - 7);
+  }
+
   roundedRect(ctx, x + 18, buttonY, buttonW, 34, 2);
   ctx.fillStyle = "#111111";
   ctx.fill();
@@ -4525,6 +4907,37 @@ PersoMinigame.prototype.drawSettingsButton = function drawSettingsButton(ctx, la
   ctx.fillText(label, x + w / 2, y + 24);
 };
 
+PersoMinigame.prototype.drawShareVideoSavingPage = function drawShareVideoSavingPage(ctx) {
+  var w = Math.min(292, this.width - 56);
+  var h = 100;
+  var x = (this.width - w) / 2;
+  var y = (this.height - h) / 2;
+  var dotCount = Math.floor(Date.now() / 360) % 3 + 1;
+  var text = "保存视频中" + "...".slice(0, dotCount);
+
+  ctx.fillStyle = "rgba(0,0,0,0.62)";
+  ctx.fillRect(0, 0, this.width, this.height);
+
+  roundedRect(ctx, x, y, w, h, 8);
+  ctx.fillStyle = "#0A0A0A";
+  ctx.fill();
+  ctx.strokeStyle = "#6A6A6A";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = this.pixelFont(20);
+  ctx.textAlign = "center";
+  ctx.fillText(text, this.width / 2, y + 56);
+};
+
+PersoMinigame.prototype.drawShareVideoFrameToContext = function drawShareVideoFrameToContext(ctx, elapsed) {
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, this.width, this.height);
+  this.drawBackground(ctx);
+  this.drawShareVideoSceneAt(ctx, elapsed);
+};
+
 PersoMinigame.prototype.drawShareVideoScene = function drawShareVideoScene(ctx) {
   var elapsed = Date.now() - this.shareVideoStartedAt;
   var messages = this.shareVideoMessages;
@@ -4564,6 +4977,102 @@ PersoMinigame.prototype.drawShareVideoHeader = function drawShareVideoHeader(ctx
   ctx.textBaseline = "middle";
   ctx.fillText(fitSingleLineText(ctx, this.currentTopic(), this.width - 64), this.width / 2, headerCenterY);
   ctx.textBaseline = "alphabetic";
+};
+
+PersoMinigame.prototype.drawShareVideoPlayButton = function drawShareVideoPlayButton(ctx, x, y, size, playing) {
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.58)";
+  ctx.beginPath();
+  ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#B1FD00";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = "#FFFFFF";
+  if (playing) {
+    var barW = size * 0.12;
+    var barH = size * 0.34;
+    roundedRect(ctx, x - barW * 1.6, y - barH / 2, barW, barH, 1);
+    ctx.fill();
+    roundedRect(ctx, x + barW * 0.6, y - barH / 2, barW, barH, 1);
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x - size * 0.12, y - size * 0.18);
+    ctx.lineTo(x - size * 0.12, y + size * 0.18);
+    ctx.lineTo(x + size * 0.2, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+};
+
+PersoMinigame.prototype.drawShareVideoPreviewPage = function drawShareVideoPreviewPage(ctx) {
+  var safeBottom = this.systemInfo.safeArea && typeof this.systemInfo.safeArea.bottom === "number"
+    ? this.systemInfo.safeArea.bottom
+    : this.height;
+  var bottomSafe = safeBottom > 0 && safeBottom <= this.height ? Math.max(0, this.height - safeBottom) : 0;
+  var buttonH = 40;
+  var buttonY = this.height - bottomSafe - 66;
+  var gap = 10;
+  var buttonW = (this.width - 48 - gap) / 2;
+  var backButtonX = 24;
+  var shareButtonX = 24 + buttonW + gap;
+  var playSize = 58;
+  var playX = this.width / 2;
+  var playY = Math.max(this.getTopReserved() + 210, (this.height - 96) / 2);
+  var elapsed = this.shareVideoPreviewPlaying
+    ? Date.now() - this.shareVideoPreviewStartedAt
+    : this.shareVideoPreviewElapsed;
+
+  elapsed = clamp(elapsed, 0, Math.max(0, this.shareVideoDurationMs - 1));
+  this.shareVideoPreviewElapsed = elapsed;
+  if (this.shareVideoPreviewPlaying && elapsed >= this.shareVideoDurationMs - 1) {
+    this.shareVideoPreviewPlaying = false;
+    this.clearShareVideoTimers();
+  }
+
+  this.drawShareVideoSceneAt(ctx, elapsed);
+
+  this.drawShareVideoPlayButton(ctx, playX, playY, playSize, this.shareVideoPreviewPlaying);
+
+  ctx.fillStyle = "rgba(0,0,0,0.68)";
+  ctx.fillRect(0, buttonY - 28, this.width, this.height - buttonY + 28);
+
+  if (this.shareVideoError || this.shareVideoNotice) {
+    ctx.fillStyle = this.shareVideoError ? "#FFC700" : "#B1FD00";
+    ctx.font = this.pixelFont(12);
+    ctx.textAlign = "center";
+    ctx.fillText(this.shareVideoError || this.shareVideoNotice, this.width / 2, buttonY - 10);
+  }
+
+  roundedRect(ctx, backButtonX, buttonY, buttonW, buttonH, 4);
+  ctx.fillStyle = "#111111";
+  ctx.fill();
+  ctx.strokeStyle = "#454545";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = this.pixelFont(14);
+  ctx.textAlign = "center";
+  ctx.fillText("返回选择", backButtonX + buttonW / 2, buttonY + 25);
+
+  roundedRect(ctx, shareButtonX, buttonY, buttonW, buttonH, 4);
+  ctx.fillStyle = "#B1FD00";
+  ctx.fill();
+  ctx.strokeStyle = "#89B93B";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = "#000000";
+  ctx.font = this.pixelFont(15);
+  ctx.textAlign = "center";
+  ctx.fillText("分享视频", shareButtonX + buttonW / 2, buttonY + 25);
+
+  this.rects.shareVideoPlay = { x: playX - playSize / 2, y: playY - playSize / 2, w: playSize, h: playSize };
+  this.rects.shareVideoConfirm = { x: shareButtonX, y: buttonY, w: buttonW, h: buttonH };
+  this.rects.shareVideoToSelection = { x: backButtonX, y: buttonY, w: buttonW, h: buttonH };
+  this.rects.shareVideoBack = { x: 0, y: 0, w: 0, h: 0 };
 };
 
 PersoMinigame.prototype.drawShareVideoResultPage = function drawShareVideoResultPage(ctx) {
@@ -4684,7 +5193,7 @@ PersoMinigame.prototype.drawTtsStatus = function drawTtsStatus(ctx, y) {
 
 PersoMinigame.prototype.drawTableHeader = function drawTableHeader(ctx, y, showShare, showVoice) {
   var buttonSize = 40;
-  var backX = 20;
+  var sidePadding = 20;
   var headerCenterY = y + buttonSize / 2;
   if (
     this.menuButtonRect &&
@@ -4693,20 +5202,21 @@ PersoMinigame.prototype.drawTableHeader = function drawTableHeader(ctx, y, showS
   ) {
     headerCenterY = (this.menuButtonRect.top + this.menuButtonRect.bottom) / 2;
   }
-  var backY = Math.round(headerCenterY - buttonSize / 2);
-  this.rects.settings = { x: backX, y: backY, w: buttonSize, h: buttonSize };
+  var buttonY = Math.round(headerCenterY - buttonSize / 2);
+  var settingsX = Math.max(sidePadding, this.width - sidePadding - buttonSize);
+  this.rects.settings = { x: settingsX, y: buttonY, w: buttonSize, h: buttonSize };
 
   if (this.images.settings && this.images.settings.width) {
-    ctx.drawImage(this.images.settings, backX + 8, backY + 8, buttonSize - 16, buttonSize - 16);
+    ctx.drawImage(this.images.settings, settingsX + 8, buttonY + 8, buttonSize - 16, buttonSize - 16);
   } else {
     ctx.strokeStyle = "#FFFFFF";
     ctx.lineWidth = 2;
-    ctx.strokeRect(backX + 11, backY + 11, buttonSize - 22, buttonSize - 22);
+    ctx.strokeRect(settingsX + 11, buttonY + 11, buttonSize - 22, buttonSize - 22);
     ctx.beginPath();
-    ctx.moveTo(backX + 20, backY + 14);
-    ctx.lineTo(backX + 20, backY + 26);
-    ctx.moveTo(backX + 14, backY + 20);
-    ctx.lineTo(backX + 26, backY + 20);
+    ctx.moveTo(settingsX + 20, buttonY + 14);
+    ctx.lineTo(settingsX + 20, buttonY + 26);
+    ctx.moveTo(settingsX + 14, buttonY + 20);
+    ctx.lineTo(settingsX + 26, buttonY + 20);
     ctx.stroke();
   }
 
@@ -4714,24 +5224,19 @@ PersoMinigame.prototype.drawTableHeader = function drawTableHeader(ctx, y, showS
   ctx.font = this.pixelFont(16);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  var headerRight = this.width - 20;
-  if (this.menuButtonRect && typeof this.menuButtonRect.left === "number") {
-    headerRight = Math.min(headerRight, this.menuButtonRect.left - 8);
-  }
-  var titleLeft = backX + buttonSize + 18;
-  var titleRight = headerRight - 12;
-  var titleW = Math.max(40, titleRight - titleLeft);
-  var titleX = titleLeft + titleW / 2;
+  var titleX = this.width / 2;
+  var titleRight = settingsX - 12;
+  var titleW = Math.max(40, Math.min(this.width - sidePadding * 2, (titleRight - titleX) * 2));
   ctx.fillText(fitSingleLineText(ctx, this.currentTopic(), titleW), titleX, headerCenterY);
   ctx.textBaseline = "alphabetic";
 
-  var shareX = headerRight - buttonSize;
+  var shareX = settingsX - buttonSize - 8;
 
   if (showShare) {
     shareX = Math.max(128, shareX);
-    this.rects.share = { x: shareX, y: backY, w: buttonSize, h: buttonSize };
+    this.rects.share = { x: shareX, y: buttonY, w: buttonSize, h: buttonSize };
     if (this.images.share && this.images.share.width) {
-      ctx.drawImage(this.images.share, shareX, backY, buttonSize, buttonSize);
+      ctx.drawImage(this.images.share, shareX, buttonY, buttonSize, buttonSize);
     }
   }
 };
@@ -5090,11 +5595,13 @@ PersoMinigame.prototype.drawPersonaSection = function drawPersonaSection(ctx, x,
     this.rects.personas[id] = { x: ax, y: ay - this.scrollY, w: avatarSize, h: itemH + 4 };
   }
 
-  var gridVisualBottom = gridTop + 3 * (itemH + rowGap) + avatarSize;
+  var labelH = Math.round(avatarSize * AVATAR_LABEL_COVER_RATIO);
+  var lastRowY = gridTop + 3 * (itemH + rowGap);
+  var gridVisualBottom = lastRowY + avatarSize * (1 - AVATAR_LABEL_COVER_RATIO) + SELECTION_AVATAR_LABEL_OFFSET_Y + labelH;
   var warningY = gridVisualBottom + (this.error ? 10 : 2);
   this.drawWarning(ctx, x + 10, warningY);
 
-  var modeY = warningY + (this.error ? 28 : 14);
+  var modeY = gridVisualBottom + (this.error ? 44 : 24);
   ctx.fillStyle = "#FFFFFF";
   ctx.font = this.pixelFont(13);
   ctx.textAlign = "left";

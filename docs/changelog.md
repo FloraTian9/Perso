@@ -6,6 +6,16 @@
 
 ## Unreleased
 
+- 增强 `/api/tts` 音频接口兼容性：新增 `HEAD` 与 `Range` 请求支持，返回 `Accept-Ranges / Content-Length / Content-Range` 等音频播放常用响应头，并允许跨域暴露这些头，提升抖音互动空间 WebView 直接播放 TTS 音频的成功率。
+- 调整 `douyin-interactive-space/` H5 语音链路：浏览器 adapter 标记为 H5 环境，TTS 播放跳过 `downloadFile/fetch -> blob`，改为直接播放 `/api/tts` HTTPS 音频 URL，并捕获 `audio.play()` 异步失败，避免测试版因 `load failed` 直接误判整条语音失败。
+- 调整 `douyin-interactive-space/` 选择人格页布局：模式区位置改为基于最后一行人格 badge 的真实底部计算，并加大到「选择模式」的间距，避免模式按钮贴住最后一行人格标签。
+- 调整 `douyin-interactive-space/` 分享视频保存体验：点击预览页「分享视频」后前台只显示「保存视频中」弹窗，不再播放回放内容；H5 导出改为后台临时 Canvas 录制，保存成功后自动回到选择人格页面。
+- 调整 `douyin-interactive-space/` 分享视频预览页：底部「返回选择」和「分享视频」按钮改为同一行自适应显示；视频保存/下载/分享成功后自动回到选择人格页面，并清理视频预览计时器。
+- 修复 `douyin-interactive-space/` 分享入口弹窗误显示录屏能力错误的问题：卡片/视频选择弹窗现在只展示入口说明，不再透传 `shareVideoError`；录屏或导出失败仅在视频预览页底部提示。
+- 重构 `douyin-interactive-space/` 分享视频流程：点击「分享视频」先进入静态视频预览页，不自动播放；预览中央提供播放/暂停按钮，底部主按钮才触发视频生成，H5 环境通过 `MediaRecorder` 录制 Canvas 并下载 WebM，原生环境继续优先接入分享/保存能力。
+- 调整 `douyin-interactive-space/` 圆桌页头部：设置按钮贴到页面右上角，不再预留额外平台菜单空白；话题标题固定以屏幕中心居中，并按右侧设置按钮自动限制最大宽度。
+- 修复 `douyin-interactive-space/` 分享卡片按钮在 H5 互动空间无响应的问题：当环境没有 `tt.shareAppMessage` 或未配置模板时，改为生成当前卡片 PNG，优先调用系统 Web Share，失败或不支持时触发下载，并在卡片预览中显示生成反馈。
+- 修复 `douyin-interactive-space/` 参与输入出现双输入框的问题：H5 textarea 改为真正隐形的输入捕获器，只保留 Canvas 绘制的项目风格输入框。
 - 新增 `douyin-interactive-space/` 互动空间 H5 静态包：复用抖音小游戏 `main.js` 与 assets，提供浏览器版 `tt` adapter、`index.html` 和 H5 config，并生成根目录含 `index.html` 的 `perso-interactive-space.zip` 用于上传测试；同时为 `/api/chat`、`/api/tts` 增加 CORS/OPTIONS 支持，允许互动空间静态前端跨域调用后端。
 - 调整 `douyin-interactive-space/` 接口失败兜底：`fetch`/CORS 失败时若启用 mock generation，会自动进入 mock 圆桌，避免本地或互动空间预览直接停在 `failed to fetch`。
 - 新增并调整 `docs/interactive-space-dev-plan.md`：互动空间版不重写 H5 UI，改为复用 `douyin-minigame/js/main.js` 并通过 H5 `tt` adapter 适配静态包，明确 ZIP 包需要构建为 `index.html + JS/CSS/assets`，降低布局和样式漂移风险。

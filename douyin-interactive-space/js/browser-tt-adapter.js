@@ -224,6 +224,7 @@
     createCanvas: function createCanvas() {
       return canvas;
     },
+    isBrowserAdapter: true,
     createImage: createImage,
     getSystemInfoSync: getSystemInfoSync,
     getMenuButtonBoundingClientRect: function getMenuButtonBoundingClientRect() {

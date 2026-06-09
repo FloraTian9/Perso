@@ -6,6 +6,10 @@
 
 ## Unreleased
 
+- 调整 `douyin-interactive-space/` H5 演示兜底：浏览器音频链路 `Load failed` 时静默切回文字播放，不再把 TTS 失败文案显示在页面上；开局请求失败并启用 mock 时也不再残留 `Load failed` 前台错误。
+- 调整 `douyin-interactive-space/` H5 入口脚本版本参数，避免本地或互动空间预览缓存旧版 `main.js` 导致已修复的 TTS pending 问题仍然复现。
+- 增强 `douyin-interactive-space/` H5 TTS 容错：为语音 pending 状态加入 900ms 超时降级，语音请求、下载或解码过慢时自动切回文字流式输出，避免互动空间测试版因音频链路挂起而卡在「思考中」。
+- 修复 `douyin-interactive-space/` H5 开局卡在第一个人格「思考中」的问题：WebAudio 语音链路现在会真正发起播放请求，并用 WebAudio 的启动时间/时长判断当前发言是否结束，避免 `ttsPendingKey` 永久挂起导致播放循环不推进。
 - 修复 `douyin-interactive-space/` H5 分享视频无反馈的问题：浏览器 adapter 保留宿主可能注入的原生分享/保存能力；H5 MediaRecorder 录制完成后不再异步触发隐藏下载并假装成功，而是保留视频结果，要求用户再次点击「保存/分享」以满足 WebView 分享/下载的用户手势限制，并在不支持时显示明确提示。
 - 调整 `douyin-interactive-space/` H5 adapter：`createInnerAudioContext()` 在支持 AudioContext 的 WebView 中改为 WebAudio 实现，彻底避免语音或背景音分支回落到 HTMLAudio 后继续触发 `audio error 4`。
 - 调整 `douyin-interactive-space/` H5 TTS 播放策略：互动空间 H5 不再使用 HTMLAudio 播放远程音频，改为 `fetch -> ArrayBuffer -> AudioContext.decodeAudioData -> BufferSource` 的 WebAudio 链路，绕过 WebView `audio error 4` 的媒体源判定；文字流式进度同步改为基于 WebAudio 启动时间计算。

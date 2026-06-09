@@ -41,6 +41,7 @@ var SPEECH_BUBBLE_PADDING_RIGHT = 24;
 var SPEECH_BUBBLE_TEXT_FONT_SIZE = 15;
 var SPEECH_BUBBLE_LINE_HEIGHT = 24;
 var TTS_MAX_TEXT_CHARS = 180;
+var TTS_PENDING_FALLBACK_MS = 900;
 var MAX_DIALOG_CONTENT_CHARS = 90;
 var NOTE_ACTION_BUTTON_WIDTH = 108;
 var NOTE_ACTION_BUTTON_HEIGHT = 58;
@@ -398,6 +399,7 @@ function PersoMinigame() {
   this.ttsFailedKeys = {};
   this.ttsPrefetchingKeys = {};
   this.ttsPendingKey = "";
+  this.ttsPendingStartedAt = 0;
   this.ttsPlaybackKey = "";
   this.ttsPlaybackMessageIndex = -1;
   this.ttsPlaybackStartedAt = 0;
@@ -942,6 +944,7 @@ PersoMinigame.prototype.ensureVoiceAudio = function ensureVoiceAudio() {
           if (self.ttsPlaybackKey) self.ttsFailedKeys[self.ttsPlaybackKey] = true;
           if (self.voiceMessageKey) self.ttsFailedKeys[self.voiceMessageKey] = true;
           self.ttsPendingKey = "";
+          self.ttsPendingStartedAt = 0;
           self.ttsPlaybackKey = "";
           self.ttsPlaybackMessageIndex = -1;
           self.ttsPlaybackReady = false;
@@ -1228,6 +1231,7 @@ PersoMinigame.prototype.stopVoiceAudio = function stopVoiceAudio() {
   }
   this.voiceMessageKey = "";
   this.ttsPendingKey = "";
+  this.ttsPendingStartedAt = 0;
   this.ttsPlaybackKey = "";
   this.ttsPlaybackMessageIndex = -1;
   this.ttsPlaybackStartedAt = 0;
@@ -1278,6 +1282,7 @@ PersoMinigame.prototype.playMessageTtsIfNeeded = function playMessageTtsIfNeeded
   }
   this.voiceMessageKey = key;
   this.ttsPendingKey = key;
+  this.ttsPendingStartedAt = Date.now();
   this.ttsPlaybackKey = "";
   this.ttsPlaybackMessageIndex = -1;
   this.ttsPlaybackStartedAt = 0;
@@ -1293,7 +1298,12 @@ PersoMinigame.prototype.playMessageTtsIfNeeded = function playMessageTtsIfNeeded
   }
 
   var audio = this.ensureVoiceAudio();
-  if (!audio || this.voiceAudioMode !== "inner") return false;
+  if (!audio || (this.voiceAudioMode !== "inner" && this.voiceAudioMode !== "webaudio")) {
+    this.voiceMessageKey = "";
+    this.ttsPendingKey = "";
+    this.ttsPendingStartedAt = 0;
+    return false;
+  }
 
   var audioUrl = this.getTtsAudioUrl(message);
   if (this.ttsAudioCache[key]) {
@@ -1331,6 +1341,7 @@ PersoMinigame.prototype.playTtsAudioSource = function playTtsAudioSource(src, ke
       } catch (seekError) {}
     }
     this.ttsPendingKey = "";
+    this.ttsPendingStartedAt = 0;
     this.ttsPlaybackKey = key;
     this.ttsPlaybackMessageIndex = typeof messageIndex === "number" ? messageIndex : this.liveMessageIndex;
     this.ttsPlaybackStartedAt = 0;
@@ -1345,9 +1356,14 @@ PersoMinigame.prototype.playTtsAudioSource = function playTtsAudioSource(src, ke
         if (self.voiceMessageKey !== key && self.ttsPlaybackKey !== key) return;
         self.ttsFailedKeys[key] = true;
         self.ttsPendingKey = "";
+        self.ttsPendingStartedAt = 0;
         self.ttsPlaybackKey = "";
         self.ttsPlaybackMessageIndex = -1;
-        self.ttsError = error && error.message ? error.message + "，已切回文字播放" : "语音播放失败，已切回文字播放";
+        self.ttsError = self.tt && self.tt.isBrowserAdapter
+          ? ""
+          : error && error.message
+            ? error.message + "，已切回文字播放"
+            : "语音播放失败，已切回文字播放";
         self.render();
       });
     }
@@ -1355,9 +1371,10 @@ PersoMinigame.prototype.playTtsAudioSource = function playTtsAudioSource(src, ke
   } catch (error) {
     this.ttsFailedKeys[key] = true;
     this.ttsPendingKey = "";
+    this.ttsPendingStartedAt = 0;
     this.ttsPlaybackKey = "";
     this.ttsPlaybackMessageIndex = -1;
-    this.ttsError = "语音播放失败，已切回文字播放";
+    this.ttsError = this.tt && this.tt.isBrowserAdapter ? "" : "语音播放失败，已切回文字播放";
   }
 };
 
@@ -1383,9 +1400,15 @@ PersoMinigame.prototype.decodeAudioBuffer = function decodeAudioBuffer(audio, by
 PersoMinigame.prototype.playTtsWebAudioSource = function playTtsWebAudioSource(src, key, messageIndex) {
   var self = this;
   var audio = this.ensureVoiceAudio();
-  if (!audio || this.voiceAudioMode !== "webaudio") return;
+  if (!audio || this.voiceAudioMode !== "webaudio") {
+    this.ttsFailedKeys[key] = true;
+    this.ttsPendingKey = "";
+    this.ttsPendingStartedAt = 0;
+    return;
+  }
 
   this.ttsPendingKey = key;
+  this.ttsPendingStartedAt = Date.now();
   this.ttsPlaybackKey = "";
   this.ttsPlaybackMessageIndex = -1;
   this.ttsPlaybackStartedAt = 0;
@@ -1435,6 +1458,7 @@ PersoMinigame.prototype.playTtsWebAudioSource = function playTtsWebAudioSource(s
       self.voiceWebAudioSource = source;
       self.voiceWebAudioGain = gain;
       self.ttsPendingKey = "";
+      self.ttsPendingStartedAt = 0;
       self.ttsPlaybackKey = key;
       self.ttsPlaybackMessageIndex = typeof messageIndex === "number" ? messageIndex : self.liveMessageIndex;
       self.ttsPlaybackStartedAt = Date.now();
@@ -1449,11 +1473,16 @@ PersoMinigame.prototype.playTtsWebAudioSource = function playTtsWebAudioSource(s
       if (self.voiceMessageKey !== key && self.ttsPendingKey !== key && self.ttsPlaybackKey !== key) return;
       self.ttsFailedKeys[key] = true;
       self.ttsPendingKey = "";
+      self.ttsPendingStartedAt = 0;
       self.ttsPlaybackKey = "";
       self.ttsPlaybackMessageIndex = -1;
       self.ttsPlaybackReady = false;
       self.ttsPlaybackEnded = false;
-      self.ttsError = error && error.message ? error.message + "，已切回文字播放" : "WebAudio 语音播放失败，已切回文字播放";
+      self.ttsError = self.tt && self.tt.isBrowserAdapter
+        ? ""
+        : error && error.message
+          ? error.message + "，已切回文字播放"
+          : "WebAudio 语音播放失败，已切回文字播放";
       self.render();
     });
 };
@@ -1471,6 +1500,7 @@ PersoMinigame.prototype.downloadAndPlayTts = function downloadAndPlayTts(url, ke
         self.ttsError = "语音请求失败（" + statusCode + "）";
         self.ttsFailedKeys[key] = true;
         self.ttsPendingKey = "";
+        self.ttsPendingStartedAt = 0;
         self.render();
         return;
       }
@@ -1481,6 +1511,7 @@ PersoMinigame.prototype.downloadAndPlayTts = function downloadAndPlayTts(url, ke
         return;
       }
       self.ttsPendingKey = "";
+      self.ttsPendingStartedAt = 0;
       if (!self.playbackPaused || self.shareVideoState === "recording") self.playTtsAudioSource(tempFilePath, key, messageIndex);
       self.render();
     },
@@ -1490,6 +1521,7 @@ PersoMinigame.prototype.downloadAndPlayTts = function downloadAndPlayTts(url, ke
       if (error && error.errMsg) self.ttsError = error.errMsg + "，已切回文字播放";
       self.ttsFailedKeys[key] = true;
       self.ttsPendingKey = "";
+      self.ttsPendingStartedAt = 0;
       self.render();
     }
   });
@@ -1503,7 +1535,19 @@ PersoMinigame.prototype.updateVisibleCharsFromTts = function updateVisibleCharsF
   if (this.ttsFailedKeys[key]) return false;
 
   if (this.ttsPlaybackKey !== key) {
-    if (this.ttsPendingKey === key) return true;
+    if (this.ttsPendingKey === key) {
+      if (!this.ttsPendingStartedAt) this.ttsPendingStartedAt = Date.now();
+      if (Date.now() - this.ttsPendingStartedAt > TTS_PENDING_FALLBACK_MS) {
+        this.ttsFailedKeys[key] = true;
+        this.ttsPendingKey = "";
+        this.ttsPendingStartedAt = 0;
+        this.ttsPlaybackKey = "";
+        this.ttsPlaybackMessageIndex = -1;
+        this.ttsError = this.tt && this.tt.isBrowserAdapter ? "" : "语音加载较慢，已切回文字播放";
+        return false;
+      }
+      return true;
+    }
     return false;
   }
 
@@ -2683,6 +2727,7 @@ PersoMinigame.prototype.prepareRoundtable = function prepareRoundtable(messages)
   var done = false;
   this.voiceMessageKey = key;
   this.ttsPendingKey = key;
+  this.ttsPendingStartedAt = Date.now();
   this.ttsError = "";
   this.render();
 
@@ -2699,6 +2744,7 @@ PersoMinigame.prototype.prepareRoundtable = function prepareRoundtable(messages)
         self.ttsFailedKeys[key] = true;
       }
       self.ttsPendingKey = "";
+      self.ttsPendingStartedAt = 0;
       self.openRoundtable(messages);
     },
     fail: function fail() {
@@ -2706,6 +2752,7 @@ PersoMinigame.prototype.prepareRoundtable = function prepareRoundtable(messages)
       done = true;
       self.ttsFailedKeys[key] = true;
       self.ttsPendingKey = "";
+      self.ttsPendingStartedAt = 0;
       self.openRoundtable(messages);
     }
   });
@@ -2826,7 +2873,7 @@ PersoMinigame.prototype.generateOpening = function generateOpening() {
     },
 	    fail: function fail(error) {
 	      if (config.ENABLE_MOCK_GENERATION) {
-	        self.error = formatNetworkFailMessage(error);
+	        self.error = "";
 	        self.prepareRoundtable(self.createMockMessages());
 	        return;
 	      }
@@ -2916,6 +2963,7 @@ PersoMinigame.prototype.openRoundtable = function openRoundtable(messages) {
   this.voiceMessageKey = "";
   this.ttsFailedKeys = {};
   this.ttsPendingKey = "";
+  this.ttsPendingStartedAt = 0;
   this.ttsPlaybackKey = "";
   this.ttsPlaybackMessageIndex = -1;
   this.ttsPlaybackStartedAt = 0;
@@ -3194,6 +3242,9 @@ PersoMinigame.prototype.isCurrentLiveTtsActive = function isCurrentLiveTtsActive
   var duration = Number(audio && audio.duration);
   if (!(duration > 0)) duration = Number(this.ttsPlaybackDuration);
   var currentTime = Number(audio && audio.currentTime);
+  if (this.voiceAudioMode === "webaudio") {
+    currentTime = this.ttsPlaybackStartedAt ? (Date.now() - this.ttsPlaybackStartedAt) / 1000 : 0;
+  }
   if (duration > 0 && currentTime >= duration - 0.08) return false;
   return true;
 };

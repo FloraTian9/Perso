@@ -105,6 +105,7 @@
   function createInnerAudioContext() {
     var audio = new Audio();
     audio.preload = "auto";
+    audio.crossOrigin = "anonymous";
     var api = {
       loop: false,
       autoplay: false,
@@ -160,11 +161,33 @@
       },
       onError: function onError(fn) {
         audio.addEventListener("error", function handleError() {
-          fn({ errMsg: "audio error" });
+          var mediaError = audio.error;
+          var code = mediaError && mediaError.code ? mediaError.code : "unknown";
+          var message = mediaError && mediaError.message ? mediaError.message : "";
+          fn({ errMsg: "audio error " + code + (message ? ": " + message : "") });
         });
       }
     };
     return api;
+  }
+
+  function unlockAudio() {
+    var silentWav = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQQAAAAAAA==";
+    try {
+      var audio = new Audio(silentWav);
+      audio.muted = true;
+      audio.volume = 0;
+      var result = audio.play();
+      if (result && result.catch) result.catch(function noop() {});
+    } catch (error) {}
+
+    try {
+      var AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextCtor) {
+        var context = new AudioContextCtor();
+        if (context.resume) context.resume().catch(function noop() {});
+      }
+    } catch (error) {}
   }
 
   function showKeyboard(options) {
@@ -234,6 +257,7 @@
     request: request,
     downloadFile: downloadFile,
     createInnerAudioContext: createInnerAudioContext,
+    unlockAudio: unlockAudio,
     showKeyboard: showKeyboard,
     hideKeyboard: hideKeyboard,
     onKeyboardInput: function onKeyboardInput(fn) {

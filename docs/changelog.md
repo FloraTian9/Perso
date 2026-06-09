@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+- 调整 `douyin-interactive-space/` 选择人格页顶部布局：H5 互动空间环境下内容起始位置从安全区预留改为更紧凑的 24px，减少顶部空白。
+- 增强 `douyin-interactive-space/` H5 音频播放兼容性：在用户触摸时主动解锁 WebView 音频播放权限，H5 Audio 设置 `crossOrigin=anonymous`，并把 media error code/message 透传到页面提示，便于定位测试版语音失败原因。
 - 增强 `/api/tts` 音频接口兼容性：新增 `HEAD` 与 `Range` 请求支持，返回 `Accept-Ranges / Content-Length / Content-Range` 等音频播放常用响应头，并允许跨域暴露这些头，提升抖音互动空间 WebView 直接播放 TTS 音频的成功率。
 - 调整 `douyin-interactive-space/` H5 语音链路：浏览器 adapter 标记为 H5 环境，TTS 播放跳过 `downloadFile/fetch -> blob`，改为直接播放 `/api/tts` HTTPS 音频 URL，并捕获 `audio.play()` 异步失败，避免测试版因 `load failed` 直接误判整条语音失败。
 - 调整 `douyin-interactive-space/` 选择人格页布局：模式区位置改为基于最后一行人格 badge 的真实底部计算，并加大到「选择模式」的间距，避免模式按钮贴住最后一行人格标签。

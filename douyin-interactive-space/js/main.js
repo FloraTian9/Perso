@@ -520,6 +520,7 @@ PersoMinigame.prototype.handleTouchStartEvent = function handleTouchStartEvent(e
   var point = this.normalizeTouchPoint(getTouchPoint(touch));
   if (!point) return;
   this.ensureVoiceAudio();
+  if (this.tt.unlockAudio) this.tt.unlockAudio();
   this.touchStart = {
     x: point.x,
     y: point.y,
@@ -924,7 +925,7 @@ PersoMinigame.prototype.ensureVoiceAudio = function ensureVoiceAudio() {
         });
       }
       if (this.voiceAudioContext.onError) {
-        this.voiceAudioContext.onError(function onVoiceError() {
+        this.voiceAudioContext.onError(function onVoiceError(error) {
           if (self.ttsPlaybackKey) self.ttsFailedKeys[self.ttsPlaybackKey] = true;
           if (self.voiceMessageKey) self.ttsFailedKeys[self.voiceMessageKey] = true;
           self.ttsPendingKey = "";
@@ -932,7 +933,7 @@ PersoMinigame.prototype.ensureVoiceAudio = function ensureVoiceAudio() {
           self.ttsPlaybackMessageIndex = -1;
           self.ttsPlaybackReady = false;
           self.ttsPlaybackEnded = false;
-          self.ttsError = "语音播放失败，已切回文字播放";
+          self.ttsError = error && error.errMsg ? error.errMsg + "，已切回文字播放" : "语音播放失败，已切回文字播放";
           self.render();
         });
       }
@@ -4175,7 +4176,7 @@ PersoMinigame.prototype.drawFooterButton = function drawFooterButton(ctx, label,
 PersoMinigame.prototype.drawSelectionContent = function drawSelectionContent(ctx) {
   var x = 30;
   var contentW = this.width - x * 2;
-  var y = this.getTopReserved() + 22;
+  var y = (this.tt && this.tt.isBrowserAdapter ? 24 : this.getTopReserved() + 22);
 
   y = this.drawHeader(ctx, x, y, contentW);
   y = this.drawPersonaSection(ctx, x, y + 20, contentW);

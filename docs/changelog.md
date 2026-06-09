@@ -6,6 +6,7 @@
 
 ## Unreleased
 
+- 修复 `douyin-interactive-space/` H5 手机端 TTS 可能静默的问题：在用户触摸/点击时对实际播放 TTS 的 WebAudio context 执行静音 buffer 解锁，并在播放前确保 context 尝试恢复运行。
 - 调整 `douyin-interactive-space/` H5 分享视频录制格式：MediaRecorder 优先尝试 `video/mp4`/H.264，只有环境不支持时才退回 WebM，并在 WebM 情况下提示手机可能无法保存到本地。
 - 修复 `douyin-interactive-space/` H5 分享视频重复触发的问题：为 Web Share 增加分享中锁和按钮状态，分享面板打开期间不再重复调用 `navigator.share()`，并将 `share() is already in progress` 转成友好提示。
 - 调整 `douyin-interactive-space/` H5 演示兜底：浏览器音频链路 `Load failed` 时静默切回文字播放，不再把 TTS 失败文案显示在页面上；开局请求失败并启用 mock 时也不再残留 `Load failed` 前台错误。

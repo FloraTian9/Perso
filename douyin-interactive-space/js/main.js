@@ -390,6 +390,7 @@ function PersoMinigame() {
   this.voiceAudioContext = null;
   this.voiceAudioMode = "";
   this.voiceAudioReady = false;
+  this.voiceAudioUnlocked = false;
   this.voiceWebAudioSource = null;
   this.voiceWebAudioGain = null;
   this.lastVoiceTickAt = 0;
@@ -527,6 +528,7 @@ PersoMinigame.prototype.handleTouchStartEvent = function handleTouchStartEvent(e
   var point = this.normalizeTouchPoint(getTouchPoint(touch));
   if (!point) return;
   this.ensureVoiceAudio();
+  this.unlockVoiceAudio();
   if (this.tt.unlockAudio) this.tt.unlockAudio();
   this.touchStart = {
     x: point.x,
@@ -749,6 +751,9 @@ PersoMinigame.prototype.bindEvents = function bindEvents() {
     this.canvas.addEventListener("mousedown", function onCanvasMouseDown(event) {
       var point = self.normalizeTouchPoint(getTouchPoint(event));
       if (!point) return;
+      self.ensureVoiceAudio();
+      self.unlockVoiceAudio();
+      if (self.tt.unlockAudio) self.tt.unlockAudio();
       self.touchStart = {
         x: point.x,
         y: point.y,
@@ -974,6 +979,39 @@ PersoMinigame.prototype.ensureVoiceAudio = function ensureVoiceAudio() {
 
   this.voiceAudioReady = !!this.voiceAudioContext;
   return this.voiceAudioContext;
+};
+
+PersoMinigame.prototype.unlockVoiceAudio = function unlockVoiceAudio() {
+  var audio = this.ensureVoiceAudio();
+  if (!audio || this.voiceAudioMode !== "webaudio") return false;
+
+  if (audio.state === "suspended" && audio.resume) {
+    try {
+      var resumeResult = audio.resume();
+      if (resumeResult && typeof resumeResult.then === "function") {
+        var self = this;
+        resumeResult.then(function onResume() {
+          if (audio.state === "running") self.voiceAudioUnlocked = true;
+        }).catch(function noop() {});
+      }
+    } catch (error) {}
+  }
+
+  try {
+    var buffer = audio.createBuffer(1, 1, audio.sampleRate || 44100);
+    var source = audio.createBufferSource();
+    var gain = audio.createGain();
+    gain.gain.value = 0;
+    source.buffer = buffer;
+    source.connect(gain);
+    gain.connect(audio.destination);
+    source.start(0);
+    if (source.stop) source.stop((audio.currentTime || 0) + 0.03);
+    this.voiceAudioUnlocked = true;
+    return true;
+  } catch (error) {
+    return false;
+  }
 };
 
 PersoMinigame.prototype.getTtsMessageKey = function getTtsMessageKey(message, messageIndex) {
@@ -1407,6 +1445,7 @@ PersoMinigame.prototype.playTtsWebAudioSource = function playTtsWebAudioSource(s
     this.ttsPendingStartedAt = 0;
     return;
   }
+  if (!this.voiceAudioUnlocked || audio.state === "suspended") this.unlockVoiceAudio();
 
   this.ttsPendingKey = key;
   this.ttsPendingStartedAt = Date.now();

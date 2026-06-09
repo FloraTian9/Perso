@@ -443,6 +443,7 @@ function PersoMinigame() {
   this.shareVideoResultPath = "";
   this.shareVideoResultBlob = null;
   this.shareVideoResultMimeType = "";
+  this.shareVideoShareInProgress = false;
   if (this.tt.getStorageSync) {
     try {
       this.sidebarPromptSeen = this.tt.getStorageSync(SIDEBAR_PROMPT_STORAGE_KEY) === "1";
@@ -2195,6 +2196,7 @@ PersoMinigame.prototype.clearShareVideoResult = function clearShareVideoResult()
   this.shareVideoResultPath = "";
   this.shareVideoResultBlob = null;
   this.shareVideoResultMimeType = "";
+  this.shareVideoShareInProgress = false;
 };
 
 PersoMinigame.prototype.getShareVideoFileName = function getShareVideoFileName(mimeType) {
@@ -2221,6 +2223,13 @@ PersoMinigame.prototype.shareBrowserRecordedVideo = function shareBrowserRecorde
   var fileName = this.getShareVideoFileName(blob && blob.type);
   var self = this;
 
+  if (this.shareVideoShareInProgress) {
+    this.shareVideoError = "";
+    this.shareVideoNotice = "分享面板已打开";
+    this.render();
+    return true;
+  }
+
   if (blob && typeof navigator !== "undefined" && navigator.share && typeof File !== "undefined") {
     try {
       var file = new File([blob], fileName, { type: blob.type || "video/webm" });
@@ -2230,17 +2239,23 @@ PersoMinigame.prototype.shareBrowserRecordedVideo = function shareBrowserRecorde
         text: "来听人格圆桌怎么聊"
       };
       if (!navigator.canShare || navigator.canShare(payload)) {
+        this.shareVideoShareInProgress = true;
         this.shareVideoError = "";
         this.shareVideoNotice = "正在打开分享面板";
         this.render();
         navigator.share(payload).then(function onShareSuccess() {
+          self.shareVideoShareInProgress = false;
           self.shareVideoError = "";
           self.shareVideoNotice = "视频已分享";
           self.exitToSelection();
         }).catch(function onShareFail(error) {
+          self.shareVideoShareInProgress = false;
           if (error && error.name === "AbortError") {
             self.shareVideoError = "";
             self.shareVideoNotice = "已取消分享";
+          } else if (error && /already in progress/i.test(String(error.message || error.errMsg || error))) {
+            self.shareVideoError = "";
+            self.shareVideoNotice = "分享面板已打开";
           } else {
             self.shareVideoError = self.formatShareError("分享视频失败", error);
             self.shareVideoNotice = "";
@@ -2249,7 +2264,15 @@ PersoMinigame.prototype.shareBrowserRecordedVideo = function shareBrowserRecorde
         });
         return true;
       }
-    } catch (error) {}
+    } catch (error) {
+      this.shareVideoShareInProgress = false;
+      if (/already in progress/i.test(String(error && (error.message || error.errMsg) || error))) {
+        this.shareVideoError = "";
+        this.shareVideoNotice = "分享面板已打开";
+        this.render();
+        return true;
+      }
+    }
   }
 
   if (this.downloadBlobUrl(videoPath, fileName)) {
@@ -2482,7 +2505,11 @@ PersoMinigame.prototype.handleShareVideoPreviewTap = function handleShareVideoPr
     return true;
   }
   if (this.hit(this.rects.shareVideoConfirm, x, y)) {
-    if (this.shareVideoResultPath) this.saveRecordedVideo(this.shareVideoResultPath);
+    if (this.shareVideoShareInProgress) {
+      this.shareVideoError = "";
+      this.shareVideoNotice = "分享面板已打开";
+      this.render();
+    } else if (this.shareVideoResultPath) this.saveRecordedVideo(this.shareVideoResultPath);
     else this.startShareVideoExport();
     return true;
   }
@@ -5304,7 +5331,11 @@ PersoMinigame.prototype.drawShareVideoPreviewPage = function drawShareVideoPrevi
   ctx.fillStyle = "#000000";
   ctx.font = this.pixelFont(15);
   ctx.textAlign = "center";
-  ctx.fillText(this.shareVideoResultPath ? "保存/分享" : "分享视频", shareButtonX + buttonW / 2, buttonY + 25);
+  ctx.fillText(
+    this.shareVideoShareInProgress ? "打开中" : this.shareVideoResultPath ? "保存/分享" : "分享视频",
+    shareButtonX + buttonW / 2,
+    buttonY + 25
+  );
 
   this.rects.shareVideoPlay = { x: playX - playSize / 2, y: playY - playSize / 2, w: playSize, h: playSize };
   this.rects.shareVideoConfirm = { x: shareButtonX, y: buttonY, w: buttonW, h: buttonH };

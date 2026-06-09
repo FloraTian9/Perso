@@ -6,6 +6,7 @@
 
 ## Unreleased
 
+- 修复 `douyin-interactive-space/` H5 分享视频重复触发的问题：为 Web Share 增加分享中锁和按钮状态，分享面板打开期间不再重复调用 `navigator.share()`，并将 `share() is already in progress` 转成友好提示。
 - 调整 `douyin-interactive-space/` H5 演示兜底：浏览器音频链路 `Load failed` 时静默切回文字播放，不再把 TTS 失败文案显示在页面上；开局请求失败并启用 mock 时也不再残留 `Load failed` 前台错误。
 - 调整 `douyin-interactive-space/` H5 入口脚本版本参数，避免本地或互动空间预览缓存旧版 `main.js` 导致已修复的 TTS pending 问题仍然复现。
 - 增强 `douyin-interactive-space/` H5 TTS 容错：为语音 pending 状态加入 900ms 超时降级，语音请求、下载或解码过慢时自动切回文字流式输出，避免互动空间测试版因音频链路挂起而卡在「思考中」。

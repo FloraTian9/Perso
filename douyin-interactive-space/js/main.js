@@ -2480,6 +2480,9 @@ PersoMinigame.prototype.currentTopic = function currentTopic() {
 PersoMinigame.prototype.getTtsAudioUrl = function getTtsAudioUrl(message) {
   var apiBaseUrl = normalizeOrigin(config.API_BASE_URL);
   if (!apiBaseUrl || !message) return "";
+  if (this.tt && this.tt.isBrowserAdapter) {
+    return apiBaseUrl + "/api/tts-mp3/" + encodeURIComponent(message.persona) + "/speech.mp3?text=" + encodeURIComponent(this.getTtsSpeechText(message));
+  }
   return apiBaseUrl + "/api/tts?persona=" + encodeURIComponent(message.persona) + "&text=" + encodeURIComponent(this.getTtsSpeechText(message));
 };
 

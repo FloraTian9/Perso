@@ -1,4 +1,5 @@
 (function createBrowserTtAdapter(global) {
+  var nativeTt = global.tt || {};
   var canvas = document.getElementById("game");
   var textInput = document.getElementById("text-input");
   var keyboardInputHandlers = [];
@@ -102,7 +103,174 @@
     });
   }
 
+  function createWebAudioInnerContext(AudioContextCtor) {
+    var context = new AudioContextCtor();
+    var source = null;
+    var gain = context.createGain();
+    var src = "";
+    var startedAt = 0;
+    var offset = 0;
+    var duration = 0;
+    var loop = false;
+    var destroyed = false;
+    var canplayHandlers = [];
+    var playHandlers = [];
+    var endedHandlers = [];
+    var errorHandlers = [];
+    gain.connect(context.destination);
+
+    function emitHandlers(list, event) {
+      for (var i = 0; i < list.length; i += 1) list[i](event || {});
+    }
+
+    function stopSource(resetOffset) {
+      if (source) {
+        try {
+          source.stop(0);
+        } catch (error) {}
+        try {
+          source.disconnect();
+        } catch (error) {}
+        source = null;
+      }
+      if (resetOffset) offset = 0;
+      startedAt = 0;
+    }
+
+    function decodeAudioData(bytes) {
+      return new Promise(function decode(resolve, reject) {
+        try {
+          var result = context.decodeAudioData(
+            bytes.slice(0),
+            function onSuccess(buffer) {
+              resolve(buffer);
+            },
+            function onFail(error) {
+              reject(error || new Error("decodeAudioData failed"));
+            }
+          );
+          if (result && typeof result.then === "function") result.then(resolve).catch(reject);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }
+
+    return {
+      autoplay: false,
+      obeyMuteSwitch: false,
+      get loop() {
+        return loop;
+      },
+      set loop(value) {
+        loop = !!value;
+        if (source) source.loop = loop;
+      },
+      get volume() {
+        return gain.gain.value;
+      },
+      set volume(value) {
+        gain.gain.value = typeof value === "number" ? value : 1;
+      },
+      get src() {
+        return src;
+      },
+      set src(value) {
+        if (src !== (value || "")) {
+          stopSource(true);
+          duration = 0;
+        }
+        src = value || "";
+      },
+      get duration() {
+        return duration || 0;
+      },
+      get currentTime() {
+        if (source && startedAt) return Math.max(0, context.currentTime - startedAt);
+        return offset;
+      },
+      set currentTime(value) {
+        offset = Math.max(0, Number(value) || 0);
+      },
+      play: function play() {
+        var self = this;
+        if (destroyed || !src) return Promise.reject(new Error("missing audio src"));
+        if (context.state === "suspended" && context.resume) {
+          try {
+            context.resume();
+          } catch (error) {}
+        }
+        return fetch(src, { mode: "cors", cache: "no-store" })
+          .then(function onResponse(response) {
+            if (!response.ok) throw new Error("audio fetch " + response.status);
+            return response.arrayBuffer();
+          })
+          .then(decodeAudioData)
+          .then(function onDecoded(buffer) {
+            stopSource(false);
+            source = context.createBufferSource();
+            source.buffer = buffer;
+            source.loop = loop;
+            duration = buffer.duration || 0;
+            if (offset >= duration) offset = 0;
+            source.connect(gain);
+            source.onended = function onEnded() {
+              if (source && !loop) {
+                offset = 0;
+                startedAt = 0;
+                source = null;
+                emitHandlers(endedHandlers);
+              }
+            };
+            startedAt = context.currentTime - offset;
+            source.start(0, offset);
+            emitHandlers(canplayHandlers);
+            emitHandlers(playHandlers);
+            return self;
+          })
+          .catch(function onAudioError(error) {
+            emitHandlers(errorHandlers, {
+              errMsg: error && error.message ? "webaudio error: " + error.message : "webaudio error"
+            });
+            throw error;
+          });
+      },
+      pause: function pause() {
+        if (source && startedAt) offset = Math.max(0, context.currentTime - startedAt);
+        stopSource(false);
+      },
+      stop: function stop() {
+        stopSource(true);
+      },
+      seek: function seek(value) {
+        offset = Math.max(0, Number(value) || 0);
+      },
+      destroy: function destroy() {
+        destroyed = true;
+        stopSource(true);
+        try {
+          gain.disconnect();
+        } catch (error) {}
+      },
+      onCanplay: function onCanplay(fn) {
+        canplayHandlers.push(fn);
+      },
+      onPlay: function onPlay(fn) {
+        playHandlers.push(fn);
+      },
+      onEnded: function onEnded(fn) {
+        endedHandlers.push(fn);
+      },
+      onError: function onError(fn) {
+        errorHandlers.push(fn);
+      }
+    };
+  }
+
   function createInnerAudioContext() {
+    var AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextCtor) return createWebAudioInnerContext(AudioContextCtor);
+
     var audio = new Audio();
     audio.preload = "auto";
     audio.crossOrigin = "anonymous";
@@ -299,9 +467,17 @@
         localStorage.setItem(key, String(value));
       } catch (error) {}
     },
-    getGameRecorderManager: null,
-    shareAppMessage: null,
-    saveVideoToPhotosAlbum: null,
-    navigateToScene: null
+    getGameRecorderManager: nativeTt.getGameRecorderManager
+      ? nativeTt.getGameRecorderManager.bind(nativeTt)
+      : null,
+    shareAppMessage: nativeTt.shareAppMessage
+      ? nativeTt.shareAppMessage.bind(nativeTt)
+      : null,
+    saveVideoToPhotosAlbum: nativeTt.saveVideoToPhotosAlbum
+      ? nativeTt.saveVideoToPhotosAlbum.bind(nativeTt)
+      : null,
+    navigateToScene: nativeTt.navigateToScene
+      ? nativeTt.navigateToScene.bind(nativeTt)
+      : null
   };
 })(window);

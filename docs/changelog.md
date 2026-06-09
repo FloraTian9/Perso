@@ -6,6 +6,9 @@
 
 ## Unreleased
 
+- 修复 `douyin-interactive-space/` H5 分享视频无反馈的问题：浏览器 adapter 保留宿主可能注入的原生分享/保存能力；H5 MediaRecorder 录制完成后不再异步触发隐藏下载并假装成功，而是保留视频结果，要求用户再次点击「保存/分享」以满足 WebView 分享/下载的用户手势限制，并在不支持时显示明确提示。
+- 调整 `douyin-interactive-space/` H5 adapter：`createInnerAudioContext()` 在支持 AudioContext 的 WebView 中改为 WebAudio 实现，彻底避免语音或背景音分支回落到 HTMLAudio 后继续触发 `audio error 4`。
+- 调整 `douyin-interactive-space/` H5 TTS 播放策略：互动空间 H5 不再使用 HTMLAudio 播放远程音频，改为 `fetch -> ArrayBuffer -> AudioContext.decodeAudioData -> BufferSource` 的 WebAudio 链路，绕过 WebView `audio error 4` 的媒体源判定；文字流式进度同步改为基于 WebAudio 启动时间计算。
 - 修复 Vercel 部署失败：收窄 `/api/tts-mp3/[persona]/speech.mp3` 路由 handler 的 `params` 类型，符合 Next.js 15 route handler 对第二参数的 build 校验。
 - 新增 H5 专用 TTS 静态文件形态接口 `/api/tts-mp3/[persona]/speech.mp3`，保留同样的 TTS 合成、CORS、`HEAD/Range` 支持；互动空间 H5 语音 URL 改为 `.mp3` 结尾，规避部分 WebView 对动态 query API 音频源报 `audio error 4` 的兼容问题。
 - 调整 `douyin-interactive-space/` 选择人格页顶部布局：H5 互动空间环境下内容起始位置从安全区预留改为更紧凑的 24px，减少顶部空白。

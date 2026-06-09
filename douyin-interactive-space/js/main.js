@@ -389,6 +389,8 @@ function PersoMinigame() {
   this.voiceAudioContext = null;
   this.voiceAudioMode = "";
   this.voiceAudioReady = false;
+  this.voiceWebAudioSource = null;
+  this.voiceWebAudioGain = null;
   this.lastVoiceTickAt = 0;
   this.lastVoiceKey = "";
   this.voiceMessageKey = "";
@@ -437,6 +439,8 @@ function PersoMinigame() {
   this.shareVideoNotice = "";
   this.shareVideoVoiceKey = "";
   this.shareVideoResultPath = "";
+  this.shareVideoResultBlob = null;
+  this.shareVideoResultMimeType = "";
   if (this.tt.getStorageSync) {
     try {
       this.sidebarPromptSeen = this.tt.getStorageSync(SIDEBAR_PROMPT_STORAGE_KEY) === "1";
@@ -899,7 +903,16 @@ PersoMinigame.prototype.ensureVoiceAudio = function ensureVoiceAudio() {
   }
 
   try {
-    if (this.tt.createInnerAudioContext) {
+    if (this.tt.isBrowserAdapter) {
+      var BrowserAudioContextCtor =
+        typeof AudioContext !== "undefined"
+          ? AudioContext
+          : typeof webkitAudioContext !== "undefined"
+            ? webkitAudioContext
+            : null;
+      if (BrowserAudioContextCtor) this.voiceAudioContext = new BrowserAudioContextCtor();
+      if (this.voiceAudioContext) this.voiceAudioMode = "webaudio";
+    } else if (this.tt.createInnerAudioContext) {
       var self = this;
       this.voiceAudioContext = this.tt.createInnerAudioContext();
       this.voiceAudioMode = "inner";
@@ -1153,6 +1166,7 @@ PersoMinigame.prototype.exitToSelection = function exitToSelection() {
   this.shareVideoPreviewElapsed = 0;
   this.shareVideoNotice = "";
   this.shareVideoError = "";
+  this.clearShareVideoResult();
   this.settingsOverlayVisible = false;
   this.noteOverlayTarget = null;
   this.pendingPrivateNote = null;
@@ -1203,6 +1217,15 @@ PersoMinigame.prototype.stopVoiceAudio = function stopVoiceAudio() {
       this.voiceAudioContext.stop();
     } catch (error) {}
   }
+  if (this.voiceAudioMode === "webaudio" && this.voiceWebAudioSource) {
+    try {
+      this.voiceWebAudioSource.stop(0);
+    } catch (error) {}
+    try {
+      this.voiceWebAudioSource.disconnect();
+    } catch (error) {}
+    this.voiceWebAudioSource = null;
+  }
   this.voiceMessageKey = "";
   this.ttsPendingKey = "";
   this.ttsPlaybackKey = "";
@@ -1236,7 +1259,7 @@ PersoMinigame.prototype.canUseTtsForMessage = function canUseTtsForMessage(messa
   if (!this.voiceEnabled || !message || !isPersona(message.persona) || !message.content) return false;
   if (!normalizeOrigin(config.API_BASE_URL)) return false;
   var audio = this.ensureVoiceAudio();
-  return !!audio && this.voiceAudioMode === "inner";
+  return !!audio && (this.voiceAudioMode === "inner" || this.voiceAudioMode === "webaudio");
 };
 
 PersoMinigame.prototype.playMessageTtsIfNeeded = function playMessageTtsIfNeeded(message, messageIndex) {
@@ -1291,7 +1314,12 @@ PersoMinigame.prototype.playTtsAudioSource = function playTtsAudioSource(src, ke
   if (!this.voiceEnabled || this.voiceMessageKey !== key) return;
 
   var audio = this.ensureVoiceAudio();
-  if (!audio || this.voiceAudioMode !== "inner") return;
+  if (!audio) return;
+  if (this.voiceAudioMode === "webaudio") {
+    this.playTtsWebAudioSource(src, key, messageIndex);
+    return;
+  }
+  if (this.voiceAudioMode !== "inner") return;
 
   try {
     audio.obeyMuteSwitch = false;
@@ -1331,6 +1359,103 @@ PersoMinigame.prototype.playTtsAudioSource = function playTtsAudioSource(src, ke
     this.ttsPlaybackMessageIndex = -1;
     this.ttsError = "语音播放失败，已切回文字播放";
   }
+};
+
+PersoMinigame.prototype.decodeAudioBuffer = function decodeAudioBuffer(audio, bytes) {
+  return new Promise(function decode(resolve, reject) {
+    try {
+      var result = audio.decodeAudioData(
+        bytes.slice(0),
+        function onDecodeSuccess(buffer) {
+          resolve(buffer);
+        },
+        function onDecodeFail(error) {
+          reject(error || new Error("decodeAudioData failed"));
+        }
+      );
+      if (result && typeof result.then === "function") result.then(resolve).catch(reject);
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+
+PersoMinigame.prototype.playTtsWebAudioSource = function playTtsWebAudioSource(src, key, messageIndex) {
+  var self = this;
+  var audio = this.ensureVoiceAudio();
+  if (!audio || this.voiceAudioMode !== "webaudio") return;
+
+  this.ttsPendingKey = key;
+  this.ttsPlaybackKey = "";
+  this.ttsPlaybackMessageIndex = -1;
+  this.ttsPlaybackStartedAt = 0;
+  this.ttsPlaybackDuration = 0;
+  this.ttsPlaybackReady = false;
+  this.ttsPlaybackEnded = false;
+
+  if (audio.state === "suspended" && audio.resume) {
+    try {
+      audio.resume();
+    } catch (resumeError) {}
+  }
+
+  fetch(src, { mode: "cors", cache: "no-store" })
+    .then(function onTtsFetch(response) {
+      if (!response.ok) throw new Error("TTS fetch " + response.status);
+      return response.arrayBuffer();
+    })
+    .then(function onTtsBytes(bytes) {
+      return self.decodeAudioBuffer(audio, bytes);
+    })
+    .then(function onTtsDecoded(buffer) {
+      if (!self.voiceEnabled || self.voiceMessageKey !== key) return;
+
+      if (self.voiceWebAudioSource) {
+        try {
+          self.voiceWebAudioSource.stop(0);
+        } catch (stopError) {}
+        try {
+          self.voiceWebAudioSource.disconnect();
+        } catch (disconnectError) {}
+      }
+
+      var source = audio.createBufferSource();
+      var gain = audio.createGain();
+      source.buffer = buffer;
+      gain.gain.value = 0.72;
+      source.connect(gain);
+      gain.connect(audio.destination);
+      source.onended = function onWebAudioEnded() {
+        if (self.ttsPlaybackKey !== key) return;
+        self.ttsPlaybackEnded = true;
+        self.ttsPlaybackReady = true;
+        self.voiceWebAudioSource = null;
+      };
+
+      self.voiceWebAudioSource = source;
+      self.voiceWebAudioGain = gain;
+      self.ttsPendingKey = "";
+      self.ttsPlaybackKey = key;
+      self.ttsPlaybackMessageIndex = typeof messageIndex === "number" ? messageIndex : self.liveMessageIndex;
+      self.ttsPlaybackStartedAt = Date.now();
+      self.ttsPlaybackDuration = buffer.duration || 0;
+      self.ttsPlaybackReady = true;
+      self.ttsPlaybackEnded = false;
+      source.start(0);
+      self.ttsError = "";
+      self.render();
+    })
+    .catch(function onTtsWebAudioError(error) {
+      if (self.voiceMessageKey !== key && self.ttsPendingKey !== key && self.ttsPlaybackKey !== key) return;
+      self.ttsFailedKeys[key] = true;
+      self.ttsPendingKey = "";
+      self.ttsPlaybackKey = "";
+      self.ttsPlaybackMessageIndex = -1;
+      self.ttsPlaybackReady = false;
+      self.ttsPlaybackEnded = false;
+      self.ttsError = error && error.message ? error.message + "，已切回文字播放" : "WebAudio 语音播放失败，已切回文字播放";
+      self.render();
+    });
 };
 
 PersoMinigame.prototype.downloadAndPlayTts = function downloadAndPlayTts(url, key, messageIndex) {
@@ -1398,6 +1523,9 @@ PersoMinigame.prototype.updateVisibleCharsFromTts = function updateVisibleCharsF
 
   var currentTime = Number(audio && audio.currentTime);
   if (!(currentTime >= 0)) currentTime = 0;
+  if (this.voiceAudioMode === "webaudio" && this.ttsPlaybackStartedAt) {
+    currentTime = (Date.now() - this.ttsPlaybackStartedAt) / 1000;
+  }
   if (!this.ttsPlaybackStartedAt && currentTime > 0) {
     this.ttsPlaybackStartedAt = Date.now() - currentTime * 1000;
   }
@@ -1842,6 +1970,7 @@ PersoMinigame.prototype.openShareVideoPreview = function openShareVideoPreview()
   this.stopVoiceAudio();
   this.setBgmDucked(false);
   this.shareOverlayVisible = false;
+  this.clearShareVideoResult();
   this.shareVideoMessages = messages;
   this.shareVideoDurationMs = 0;
   for (var i = 0; i < messages.length; i += 1) {
@@ -2013,9 +2142,22 @@ PersoMinigame.prototype.toggleShareVideoPreviewPlayback = function toggleShareVi
   else this.playShareVideoPreview();
 };
 
-PersoMinigame.prototype.getShareVideoFileName = function getShareVideoFileName() {
+PersoMinigame.prototype.clearShareVideoResult = function clearShareVideoResult() {
+  if (this.shareVideoResultPath && /^blob:/.test(this.shareVideoResultPath) && typeof URL !== "undefined") {
+    try {
+      URL.revokeObjectURL(this.shareVideoResultPath);
+    } catch (error) {}
+  }
+  this.shareVideoResultPath = "";
+  this.shareVideoResultBlob = null;
+  this.shareVideoResultMimeType = "";
+};
+
+PersoMinigame.prototype.getShareVideoFileName = function getShareVideoFileName(mimeType) {
   var topic = this.currentTopic().slice(0, 18).replace(/[\\/:*?"<>|\s]+/g, "-");
-  return "perso-video" + (topic ? "-" + topic : "") + ".webm";
+  var type = String(mimeType || this.shareVideoResultMimeType || "").toLowerCase();
+  var ext = type.indexOf("mp4") >= 0 ? "mp4" : "webm";
+  return "perso-video" + (topic ? "-" + topic : "") + "." + ext;
 };
 
 PersoMinigame.prototype.downloadBlobUrl = function downloadBlobUrl(url, fileName) {
@@ -2028,6 +2170,55 @@ PersoMinigame.prototype.downloadBlobUrl = function downloadBlobUrl(url, fileName
   link.click();
   document.body.removeChild(link);
   return true;
+};
+
+PersoMinigame.prototype.shareBrowserRecordedVideo = function shareBrowserRecordedVideo(videoPath) {
+  var blob = this.shareVideoResultBlob;
+  var fileName = this.getShareVideoFileName(blob && blob.type);
+  var self = this;
+
+  if (blob && typeof navigator !== "undefined" && navigator.share && typeof File !== "undefined") {
+    try {
+      var file = new File([blob], fileName, { type: blob.type || "video/webm" });
+      var payload = {
+        files: [file],
+        title: "Perso 人格圆桌",
+        text: "来听人格圆桌怎么聊"
+      };
+      if (!navigator.canShare || navigator.canShare(payload)) {
+        this.shareVideoError = "";
+        this.shareVideoNotice = "正在打开分享面板";
+        this.render();
+        navigator.share(payload).then(function onShareSuccess() {
+          self.shareVideoError = "";
+          self.shareVideoNotice = "视频已分享";
+          self.exitToSelection();
+        }).catch(function onShareFail(error) {
+          if (error && error.name === "AbortError") {
+            self.shareVideoError = "";
+            self.shareVideoNotice = "已取消分享";
+          } else {
+            self.shareVideoError = self.formatShareError("分享视频失败", error);
+            self.shareVideoNotice = "";
+          }
+          self.render();
+        });
+        return true;
+      }
+    } catch (error) {}
+  }
+
+  if (this.downloadBlobUrl(videoPath, fileName)) {
+    this.shareVideoError = "";
+    this.shareVideoNotice = "已尝试保存；若无弹窗则当前容器不支持";
+    this.render();
+    return true;
+  }
+
+  this.shareVideoError = "当前环境不支持直接保存视频";
+  this.shareVideoNotice = "";
+  this.render();
+  return false;
 };
 
 PersoMinigame.prototype.recordShareVideoWithMediaRecorder = function recordShareVideoWithMediaRecorder() {
@@ -2114,16 +2305,13 @@ PersoMinigame.prototype.recordShareVideoWithMediaRecorder = function recordShare
 
     var blob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
     var url = URL.createObjectURL(blob);
+    self.clearShareVideoResult();
     self.shareVideoResultPath = url;
-    if (self.downloadBlobUrl(url, self.getShareVideoFileName())) {
-      self.shareVideoError = "";
-      self.shareVideoNotice = "已生成视频文件";
-      self.exitToSelection();
-    } else {
-      self.shareVideoError = "当前环境不支持保存视频";
-      self.shareVideoNotice = "";
-      self.render();
-    }
+    self.shareVideoResultBlob = blob;
+    self.shareVideoResultMimeType = blob.type || recorder.mimeType || "video/webm";
+    self.shareVideoError = "";
+    self.shareVideoNotice = "视频已生成，再点分享视频";
+    self.render();
   };
 
   try {
@@ -2208,14 +2396,7 @@ PersoMinigame.prototype.saveRecordedVideo = function saveRecordedVideo(videoPath
     return;
   }
   if (!this.tt.saveVideoToPhotosAlbum) {
-    if (this.downloadBlobUrl(videoPath, this.getShareVideoFileName())) {
-      this.shareVideoError = "";
-      this.shareVideoNotice = "已生成视频文件";
-      this.exitToSelection();
-    } else {
-      this.shareVideoError = "当前环境不支持保存视频";
-      this.render();
-    }
+    this.shareBrowserRecordedVideo(videoPath);
     return;
   }
 
@@ -2245,7 +2426,7 @@ PersoMinigame.prototype.closeShareVideoPreview = function closeShareVideoPreview
   this.clearShareVideoTimers();
   this.stopVoiceAudio();
   this.shareVideoState = "idle";
-  this.shareVideoResultPath = "";
+  this.clearShareVideoResult();
   this.shareVideoNotice = "";
   this.shareVideoError = "";
   this.render();
@@ -2257,7 +2438,8 @@ PersoMinigame.prototype.handleShareVideoPreviewTap = function handleShareVideoPr
     return true;
   }
   if (this.hit(this.rects.shareVideoConfirm, x, y)) {
-    this.startShareVideoExport();
+    if (this.shareVideoResultPath) this.saveRecordedVideo(this.shareVideoResultPath);
+    else this.startShareVideoExport();
     return true;
   }
   if (this.hit(this.rects.shareVideoToSelection, x, y)) {
@@ -2286,7 +2468,7 @@ PersoMinigame.prototype.handleShareVideoResultTap = function handleShareVideoRes
   }
   if (this.hit(this.rects.shareVideoBack, x, y)) {
     this.shareVideoState = "idle";
-    this.shareVideoResultPath = "";
+    this.clearShareVideoResult();
     this.render();
     return true;
   }
@@ -5048,7 +5230,7 @@ PersoMinigame.prototype.drawShareVideoPreviewPage = function drawShareVideoPrevi
     ctx.fillStyle = this.shareVideoError ? "#FFC700" : "#B1FD00";
     ctx.font = this.pixelFont(12);
     ctx.textAlign = "center";
-    ctx.fillText(this.shareVideoError || this.shareVideoNotice, this.width / 2, buttonY - 10);
+    ctx.fillText(fitSingleLineText(ctx, this.shareVideoError || this.shareVideoNotice, this.width - 36), this.width / 2, buttonY - 10);
   }
 
   roundedRect(ctx, backButtonX, buttonY, buttonW, buttonH, 4);
@@ -5071,7 +5253,7 @@ PersoMinigame.prototype.drawShareVideoPreviewPage = function drawShareVideoPrevi
   ctx.fillStyle = "#000000";
   ctx.font = this.pixelFont(15);
   ctx.textAlign = "center";
-  ctx.fillText("分享视频", shareButtonX + buttonW / 2, buttonY + 25);
+  ctx.fillText(this.shareVideoResultPath ? "保存/分享" : "分享视频", shareButtonX + buttonW / 2, buttonY + 25);
 
   this.rects.shareVideoPlay = { x: playX - playSize / 2, y: playY - playSize / 2, w: playSize, h: playSize };
   this.rects.shareVideoConfirm = { x: shareButtonX, y: buttonY, w: buttonW, h: buttonH };

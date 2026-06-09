@@ -2218,6 +2218,25 @@ PersoMinigame.prototype.downloadBlobUrl = function downloadBlobUrl(url, fileName
   return true;
 };
 
+PersoMinigame.prototype.getShareVideoRecorderOptions = function getShareVideoRecorderOptions() {
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return {};
+  var candidates = [
+    "video/mp4;codecs=avc1.42E01E",
+    "video/mp4;codecs=avc1.640028",
+    "video/mp4;codecs=h264",
+    "video/mp4",
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm"
+  ];
+  for (var i = 0; i < candidates.length; i += 1) {
+    try {
+      if (MediaRecorder.isTypeSupported(candidates[i])) return { mimeType: candidates[i] };
+    } catch (error) {}
+  }
+  return {};
+};
+
 PersoMinigame.prototype.shareBrowserRecordedVideo = function shareBrowserRecordedVideo(videoPath) {
   var blob = this.shareVideoResultBlob;
   var fileName = this.getShareVideoFileName(blob && blob.type);
@@ -2326,11 +2345,7 @@ PersoMinigame.prototype.recordShareVideoWithMediaRecorder = function recordShare
     this.drawShareVideoFrameToContext(recordCtx, 0);
     if (!recordCanvas.captureStream) throw new Error("captureStream unavailable");
     stream = recordCanvas.captureStream(30);
-    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
-      options.mimeType = "video/webm;codecs=vp9";
-    } else if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
-      options.mimeType = "video/webm;codecs=vp8";
-    }
+    options = this.getShareVideoRecorderOptions();
     recorder = new MediaRecorder(stream, options);
   } catch (error) {
     this.shareVideoState = "preview";
@@ -2370,14 +2385,17 @@ PersoMinigame.prototype.recordShareVideoWithMediaRecorder = function recordShare
       return;
     }
 
-    var blob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+    var generatedType = recorder.mimeType || options.mimeType || "video/webm";
+    var blob = new Blob(chunks, { type: generatedType });
     var url = URL.createObjectURL(blob);
     self.clearShareVideoResult();
     self.shareVideoResultPath = url;
     self.shareVideoResultBlob = blob;
-    self.shareVideoResultMimeType = blob.type || recorder.mimeType || "video/webm";
+    self.shareVideoResultMimeType = blob.type || generatedType;
     self.shareVideoError = "";
-    self.shareVideoNotice = "视频已生成，再点分享视频";
+    self.shareVideoNotice = /mp4/i.test(self.shareVideoResultMimeType)
+      ? "视频已生成，再点保存/分享"
+      : "已生成 WebM，手机可能无法保存";
     self.render();
   };
 

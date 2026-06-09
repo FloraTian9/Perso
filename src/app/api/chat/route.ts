@@ -9,6 +9,12 @@ export const dynamic = "force-dynamic";
 // Hobby 允许配到最大 60s，确保 fun/continuation 全程能跑完。
 export const maxDuration = 60;
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 type ChatRequestBody = {
   topic?: unknown;
   mode?: unknown;
@@ -282,7 +288,7 @@ export async function POST(request: Request) {
   try {
     body = (await request.json()) as ChatRequestBody;
   } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    return Response.json({ error: "Invalid JSON body" }, { status: 400, headers: corsHeaders });
   }
 
   const mode = asMode(body.mode);
@@ -316,7 +322,7 @@ export async function POST(request: Request) {
       {
         error: "这个话题暂时不适合圆桌生成。换一个更日常的问题试试。",
       },
-      { status: 400 },
+      { status: 400, headers: corsHeaders },
     );
   }
 
@@ -335,6 +341,7 @@ export async function POST(request: Request) {
 
     return new Response(stream, {
       headers: {
+        ...corsHeaders,
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
@@ -351,6 +358,13 @@ export async function POST(request: Request) {
       elapsedMs: Date.now() - startedAt,
       message,
     });
-    return Response.json({ error: clientMessage }, { status: 503 });
+    return Response.json({ error: clientMessage }, { status: 503, headers: corsHeaders });
   }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
 }

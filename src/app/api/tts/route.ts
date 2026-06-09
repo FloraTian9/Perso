@@ -9,6 +9,11 @@ export const maxDuration = 60;
 const MAX_TTS_CHARS = 180;
 const TTS_CACHE_CONTROL = "no-store";
 const ttsCache = new Map<string, { bytes: ArrayBuffer; contentType: string; voice: string }>();
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, MAX_TTS_CHARS);
@@ -35,11 +40,11 @@ export async function GET(request: Request) {
   const text = normalizeText(url.searchParams.get("text") ?? "");
 
   if (!isPersonaId(persona)) {
-    return Response.json({ error: "Invalid persona" }, { status: 400 });
+    return Response.json({ error: "Invalid persona" }, { status: 400, headers: corsHeaders });
   }
 
   if (!text) {
-    return Response.json({ error: "Missing text" }, { status: 400 });
+    return Response.json({ error: "Missing text" }, { status: 400, headers: corsHeaders });
   }
 
   const key = cacheKey(persona, text);
@@ -47,6 +52,7 @@ export async function GET(request: Request) {
   if (cached) {
     return new Response(cached.bytes.slice(0), {
       headers: {
+        ...corsHeaders,
         "Content-Type": cached.contentType,
         "Cache-Control": TTS_CACHE_CONTROL,
         "X-Perso-TTS-Voice": cached.voice,
@@ -78,6 +84,7 @@ export async function GET(request: Request) {
 
     return new Response(bytes.slice(0), {
       headers: {
+        ...corsHeaders,
         "Content-Type": contentType,
         "Cache-Control": TTS_CACHE_CONTROL,
         "X-Perso-TTS-Voice": voice,
@@ -89,7 +96,14 @@ export async function GET(request: Request) {
         error: toClientError(error),
         voice: getPersonaTtsVoice(persona),
       },
-      { status: 503 },
+      { status: 503, headers: corsHeaders },
     );
   }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
 }

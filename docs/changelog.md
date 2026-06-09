@@ -6,6 +6,9 @@
 
 ## Unreleased
 
+- 新增 `douyin-interactive-space/` 互动空间 H5 静态包：复用抖音小游戏 `main.js` 与 assets，提供浏览器版 `tt` adapter、`index.html` 和 H5 config，并生成根目录含 `index.html` 的 `perso-interactive-space.zip` 用于上传测试；同时为 `/api/chat`、`/api/tts` 增加 CORS/OPTIONS 支持，允许互动空间静态前端跨域调用后端。
+- 调整 `douyin-interactive-space/` 接口失败兜底：`fetch`/CORS 失败时若启用 mock generation，会自动进入 mock 圆桌，避免本地或互动空间预览直接停在 `failed to fetch`。
+- 新增并调整 `docs/interactive-space-dev-plan.md`：互动空间版不重写 H5 UI，改为复用 `douyin-minigame/js/main.js` 并通过 H5 `tt` adapter 适配静态包，明确 ZIP 包需要构建为 `index.html + JS/CSS/assets`，降低布局和样式漂移风险。
 - 修复 `douyin-minigame/` 趣玩模式气氛按钮效果不明显的问题：点击真诚/强势/毒舌时将下一位说话人格传给后端生成，并强化真诚/强势 prompt 的可感知语气要求，避免前端仅改 persona 字段导致内容与头像不一致。
 - 同步抖音小游戏分享体验到 H5：圆桌结束后分享入口改为「卡片 / 视频」选择，卡片沿用现有保存流程，视频新增 Canvas 回放预览与 WebM 生成/分享下载能力。
 - 同步抖音小游戏语音体验到 H5：圆桌页新增有声/静音按钮，按当前 MBTI 人格调用 `/api/tts` 播放语音，并在暂停、回看、结束和关闭语音时同步控制音频。

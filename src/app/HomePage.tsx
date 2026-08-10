@@ -79,19 +79,32 @@ export function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: topic.trim(), personas: selected, mode }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as { session_id: string; session?: { topic?: string } };
+      const responseText = await res.text();
+      let payload: { session_id?: string; session?: { topic?: string }; error?: string } | null = null;
+      if (responseText) {
+        try {
+          payload = JSON.parse(responseText) as { session_id?: string; session?: { topic?: string }; error?: string };
+        } catch {
+          payload = { error: responseText };
+        }
+      }
+      if (!res.ok) {
+        throw new Error(payload?.error || "创建圆桌失败");
+      }
+      if (!payload?.session_id) {
+        throw new Error("创建圆桌失败");
+      }
       try {
         window.sessionStorage.setItem(
-          `${SESSION_PERSONAS_KEY_PREFIX}${data.session_id}`,
+          `${SESSION_PERSONAS_KEY_PREFIX}${payload.session_id}`,
           JSON.stringify(selected),
         );
         window.sessionStorage.setItem(
-          `${SESSION_TOPIC_KEY_PREFIX}${data.session_id}`,
-          data.session?.topic ?? topic.trim(),
+          `${SESSION_TOPIC_KEY_PREFIX}${payload.session_id}`,
+          payload.session?.topic ?? topic.trim(),
         );
       } catch {}
-      router.push(`/table/${data.session_id}`);
+      router.push(`/table/${payload.session_id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "创建圆桌失败");
       setIsSubmitting(false);

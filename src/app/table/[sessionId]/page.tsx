@@ -10,6 +10,7 @@ import { ShareOptions } from "@/components/roundtable/ShareOptions";
 import { ShareVideo } from "@/components/roundtable/ShareVideo";
 import { USER_INPUT_AREA_HEIGHT, UserInput } from "@/components/roundtable/UserInput";
 import { isPersonaId } from "@/lib/personaIds";
+import { getPersonaTtsSpeedRatio } from "@/lib/ttsProfile";
 import type { Atmosphere, MessageLabel, PersonaId, RoundtableMessage, Session } from "@/types";
 
 type StreamStatus = "loading" | "generating" | "paused" | "done" | "waiting" | "error";
@@ -19,15 +20,16 @@ type PrivateNoteDraft = { targetPersona: PersonaId; content: string };
 
 const MAX_DIALOG_CONTENT_CHARS = 90;
 const labels = new Set<MessageLabel>(["反驳", "追问", "打断", "共识"]);
-const TYPEWRITER_INTERVAL_MS = 150;   
+const BASE_TYPEWRITER_INTERVAL_MS = 150;
+const MIN_TYPEWRITER_INTERVAL_MS = 80;
 const CHARS_PER_TICK = 1;
+const REPLAY_CHAR_MS = BASE_TYPEWRITER_INTERVAL_MS / CHARS_PER_TICK;
 const BETWEEN_MSG_PAUSE_MS = 1500;   // 每条消息结束后停顿
 const USER_SPEAKER_HOLD_MS = 2000;
 const PLAYBACK_CONTROLS_AREA_HEIGHT = 80;  // 回放底栏（PlaybackControls）的固定可视高度，含 safe-area 余量
 const FOOTER_AREA_HEIGHT = 90;             // 实时控制栏（进度条 + 暂停 + 结束）的高度，含 safe-area 余量
 const ATMOSPHERE_CONTROLS_AREA_HEIGHT = 48;
 const REPLAY_TICK_MS = 80;
-const REPLAY_CHAR_MS = TYPEWRITER_INTERVAL_MS / CHARS_PER_TICK;
 const TTS_TEXT_MAX_CHARS = 180;
 const SESSION_PERSONAS_KEY_PREFIX = "perso:session-personas:";
 const SESSION_TOPIC_KEY_PREFIX = "perso:session-topic:";
@@ -46,6 +48,11 @@ type ReplayFrame = {
   content: string;
   timeMs: number;
 };
+
+function getTypewriterIntervalMs(persona?: PersonaId): number {
+  const ratio = persona ? getPersonaTtsSpeedRatio(persona) : 1;
+  return Math.max(MIN_TYPEWRITER_INTERVAL_MS, Math.round(BASE_TYPEWRITER_INTERVAL_MS / ratio));
+}
 
 type LiveProgressControlsProps = {
   progressRatio: number;
@@ -583,7 +590,8 @@ async function fetchChatResponseWithRetry(
 }
 
 function getReplayMessageDuration(message: RoundtableMessage): number {
-  return Math.max(REPLAY_CHAR_MS, message.content.length * REPLAY_CHAR_MS) + BETWEEN_MSG_PAUSE_MS;
+  const charMs = getTypewriterIntervalMs(isPersonaId(message.persona) ? message.persona : undefined);
+  return Math.max(charMs, message.content.length * charMs) + BETWEEN_MSG_PAUSE_MS;
 }
 
 function getVisibleReplayTime(fullMessages: RoundtableMessage[], visibleMessages: RoundtableMessage[]): number {
@@ -623,11 +631,12 @@ function getReplayFrame(messages: RoundtableMessage[], timeMs: number): ReplayFr
   let elapsed = Math.max(0, timeMs);
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
-    const typingMs = Math.max(REPLAY_CHAR_MS, message.content.length * REPLAY_CHAR_MS);
+    const charMs = getTypewriterIntervalMs(isPersonaId(message.persona) ? message.persona : undefined);
+    const typingMs = Math.max(charMs, message.content.length * charMs);
     const durationMs = typingMs + BETWEEN_MSG_PAUSE_MS;
 
     if (elapsed <= typingMs) {
-      const visibleChars = Math.min(message.content.length, Math.ceil(elapsed / REPLAY_CHAR_MS));
+      const visibleChars = Math.min(message.content.length, Math.ceil(elapsed / charMs));
       return { index: i + 1, content: message.content.slice(0, visibleChars), timeMs };
     }
 
@@ -739,8 +748,10 @@ export default function TablePage() {
   const privateNoteOpenRef = useRef(false);
   const resumeAfterPrivateNoteCancelRef = useRef(false);
   const resumeAfterPrivateNoteCancelRunnerRef = useRef<(() => void) | null>(null);
+  const restartRevealLoopRef = useRef<(() => void) | null>(null);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const ttsPlayingKeyRef = useRef("");
+  const ttsDurationMsRef = useRef(0);
 
   // 当前场景展示的活跃人格和气泡内容
   const lastMessage = messages[messages.length - 1];
@@ -845,6 +856,7 @@ export default function TablePage() {
     }
     ttsAudioRef.current = null;
     ttsPlayingKeyRef.current = "";
+    ttsDurationMsRef.current = 0;
   }, []);
 
   const pauseTtsAudio = useCallback(() => {
@@ -873,7 +885,21 @@ export default function TablePage() {
     audio.preload = "auto";
     ttsAudioRef.current = audio;
     ttsPlayingKeyRef.current = key;
+    ttsDurationMsRef.current = 0;
     setVoiceError("");
+
+    const syncRevealTiming = () => {
+      if (ttsPlayingKeyRef.current !== key) return;
+      if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+      ttsDurationMsRef.current = audio.duration * 1000;
+      if (statusRef.current !== "generating") return;
+      if (currentRevealRef.current?.message && getTtsMessageKey(currentRevealRef.current.message) === key) {
+        restartRevealLoopRef.current?.();
+      }
+    };
+
+    audio.addEventListener("loadedmetadata", syncRevealTiming);
+    audio.addEventListener("durationchange", syncRevealTiming);
 
     audio.play().catch(() => {
       if (ttsPlayingKeyRef.current !== key) return;
@@ -912,6 +938,8 @@ export default function TablePage() {
   const startStreamDraftRevealLoop = useCallback(() => {
     if (statusRef.current === "paused") return;
     if (streamDraftRevealTimerRef.current !== null) return;
+    const target = streamDraftTargetRef.current;
+    const tickMs = getTypewriterIntervalMs(target?.persona);
 
     streamDraftRevealTimerRef.current = window.setInterval(() => {
       if (statusRef.current === "paused") return;
@@ -930,7 +958,7 @@ export default function TablePage() {
         streamDraftRef.current = nextDraft;
         return nextDraft;
       });
-    }, TYPEWRITER_INTERVAL_MS);
+    }, tickMs);
   }, [clearStreamDraft]);
 
   const applyReplayTime = useCallback((timeMs: number) => {
@@ -959,6 +987,8 @@ export default function TablePage() {
   const startRevealLoop = useCallback(() => {
     if (revealTimerRef.current !== null) return;
     if (betweenPauseRef.current !== null) return;
+    const currentMessage = currentRevealRef.current?.message;
+    const tickMs = getTypewriterIntervalMs(isPersonaId(currentMessage?.persona) ? currentMessage.persona : undefined);
     revealTimerRef.current = window.setInterval(() => {
       if (statusRef.current === "paused") { stopRevealLoop(); return; }
       if (userSpeakerMessageRef.current) return;
@@ -999,8 +1029,15 @@ export default function TablePage() {
           startRevealLoop();
         }, BETWEEN_MSG_PAUSE_MS);
       }
-    }, TYPEWRITER_INTERVAL_MS);
+    }, tickMs);
   }, [finishGeneration, stopRevealLoop]);
+
+  useEffect(() => {
+    restartRevealLoopRef.current = () => {
+      stopRevealLoop();
+      startRevealLoop();
+    };
+  }, [startRevealLoop, stopRevealLoop]);
 
   const enqueueMessages = useCallback((next: RoundtableMessage[]) => {
     if (next.length === 0) return;

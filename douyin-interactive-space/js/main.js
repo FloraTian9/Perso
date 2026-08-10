@@ -3102,10 +3102,19 @@ PersoMinigame.prototype.requestContinuation = function requestContinuation(showT
         : JSON.stringify(response.data || {});
 
       if (statusCode >= 400) {
+        var fallbackMessage = self.createAtmosphereMockMessage();
+        if (isPersona(forcedFirstPersona)) fallbackMessage.persona = forcedFirstPersona;
+        var shouldAdvanceAfterStatusError = self.shouldAdvanceFromCompletedLiveMessage();
+        var fallbackIndex = self.tableMessages.length;
         self.isFetchingContinuation = false;
         self.thinkingVisible = false;
         self.thinkingPersona = "";
-        if (self.liveMessageIndex >= self.tableMessages.length - 1) self.finishRoundtableExperience();
+        fallbackMessage.turn = self.tableMessages.length + 1;
+        self.tableMessages.push(fallbackMessage);
+        self.messages = self.tableMessages;
+        if (shouldAdvanceAfterStatusError) self.advanceLiveMessageTo(fallbackIndex);
+        self.status = "generating";
+        self.startPlaybackLoop();
         self.render();
         return;
       }
@@ -3135,11 +3144,20 @@ PersoMinigame.prototype.requestContinuation = function requestContinuation(showT
     },
     fail: function fail(error) {
       if (requestId !== self.generationRequestId) return;
+      var fallbackMessage = self.createAtmosphereMockMessage();
+      if (isPersona(forcedFirstPersona)) fallbackMessage.persona = forcedFirstPersona;
+      var shouldAdvanceAfterFail = self.shouldAdvanceFromCompletedLiveMessage();
+      var fallbackIndex = self.tableMessages.length;
       self.isFetchingContinuation = false;
       self.thinkingVisible = false;
       self.thinkingPersona = "";
       if (isInvalidDomainError(error)) self.ttsError = formatNetworkFailMessage(error);
-      if (self.liveMessageIndex >= self.tableMessages.length - 1) self.finishRoundtableExperience();
+      fallbackMessage.turn = self.tableMessages.length + 1;
+      self.tableMessages.push(fallbackMessage);
+      self.messages = self.tableMessages;
+      if (shouldAdvanceAfterFail) self.advanceLiveMessageTo(fallbackIndex);
+      self.status = "generating";
+      self.startPlaybackLoop();
       self.render();
     }
   });
@@ -3382,7 +3400,14 @@ PersoMinigame.prototype.applyPrivateNote = function applyPrivateNote(targetPerso
   this.generationRequestId += 1;
 
   if (config.FORCE_MOCK_GENERATION || !normalizeOrigin(config.API_BASE_URL)) {
-    this.tableMessages.push(this.createMockNoteMessage(targetPersona, note));
+    var mockNoteMessage = this.createMockNoteMessage(targetPersona, note);
+    var mockFollowMessage = this.createAtmosphereMockMessage();
+    mockFollowMessage.persona = this.getNextPersonaAfter(targetPersona);
+    mockNoteMessage.turn = this.tableMessages.length + 1;
+    this.tableMessages.push(mockNoteMessage);
+    mockFollowMessage.turn = this.tableMessages.length + 1;
+    this.tableMessages.push(mockFollowMessage);
+    this.messages = this.tableMessages;
     this.status = "generating";
     this.playbackPaused = false;
     this.startPlaybackLoop();
@@ -3727,7 +3752,7 @@ PersoMinigame.prototype.requestPrivateNote = function requestPrivateNote(targetP
       if (shouldAdvanceFromCurrent) self.advanceLiveMessageTo(firstNewIndex);
       self.startPlaybackLoop();
       self.render();
-      self.requestContinuation(false);
+      self.requestContinuation(false, true, self.getNextPersonaAfter(targetPersona));
     },
     fail: function fail(error) {
       if (requestId !== self.generationRequestId) return;
@@ -4074,6 +4099,15 @@ PersoMinigame.prototype.handleRoundtableTap = function handleRoundtableTap(x, y)
     }
   }
 
+  if (this.mode !== "participant" && this.status !== "done") {
+    for (key in (this.rects.notePersonas || {})) {
+      if (Object.prototype.hasOwnProperty.call(this.rects.notePersonas, key) && this.hit(this.rects.notePersonas[key], x, y)) {
+        this.openPrivateNote(key);
+        return;
+      }
+    }
+  }
+
   if (this.hit(this.rects.playToggle, x, y)) {
     if (this.status === "waiting") return;
     if (this.playbackPaused) {
@@ -4120,15 +4154,6 @@ PersoMinigame.prototype.handleRoundtableTap = function handleRoundtableTap(x, y)
     this.progressDragRatio = 1;
     this.render();
     return;
-  }
-
-  if (this.mode !== "participant" && this.status !== "done") {
-    for (key in (this.rects.notePersonas || {})) {
-      if (Object.prototype.hasOwnProperty.call(this.rects.notePersonas, key) && this.hit(this.rects.notePersonas[key], x, y)) {
-        this.openPrivateNote(key);
-        return;
-      }
-    }
   }
 };
 

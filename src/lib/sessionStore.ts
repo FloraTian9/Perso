@@ -9,6 +9,10 @@ type CreateSessionInput = {
 
 type SessionStore = Map<string, Session>;
 
+function getPersistedMode(mode: ChatMode): Session["mode"] {
+  return mode === "fun" ? "spectator" : mode;
+}
+
 // WARNING: In-process store only. Vercel serverless spins up multiple isolated
 // instances, so sessions created in one will 404 in another. Replace with
 // Supabase persistence (M5) before any production deployment.
@@ -37,7 +41,10 @@ export async function createSession({ topic, mode, personas }: CreateSessionInpu
 
   sessions.set(id, session);
   try {
-    const persisted = await dbCreateSession(session);
+    const persisted = await dbCreateSession({
+      ...session,
+      mode: getPersistedMode(session.mode),
+    });
     if (!persisted) {
       if (shouldRequirePersistentSessions()) {
         sessions.delete(id);

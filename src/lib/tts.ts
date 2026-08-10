@@ -1,4 +1,5 @@
 import type { PersonaId } from "@/types";
+import { getPersonaTtsSpeedRatio as getSharedPersonaTtsSpeedRatio } from "@/lib/ttsProfile";
 
 const DEFAULT_TTS_MODEL = "cosyvoice-v3.5-flash";
 const DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/api/v1";
@@ -49,10 +50,6 @@ const PERSONA_VOLCENGINE_VOICES: Record<PersonaId, string> = {
   ESFP: "zh_female_tianmeitaozi_uranus_bigtts",
 };
 
-const PERSONA_VOLCENGINE_SPEED_RATIOS: Partial<Record<PersonaId, number>> = {
-  INFP: 1.15,
-  ISTJ: 1.2,
-};
 const DEFAULT_VOLCENGINE_SPEED_BUMP = 1.16;
 
 const PERSONA_COSYVOICE_PROMPTS: Record<PersonaId, string> = {
@@ -175,7 +172,7 @@ function getVolcenginePersonaSpeedRatio(persona: PersonaId): number {
     process.env[`VOLCENGINE_TTS_SPEED_${persona}`] ||
     process.env.DOUBAO_TTS_SPEED ||
     process.env.VOLCENGINE_TTS_SPEED;
-  const baseValue = raw ? Number(raw) : PERSONA_VOLCENGINE_SPEED_RATIOS[persona] || 1;
+  const baseValue = raw ? Number(raw) : getSharedPersonaTtsSpeedRatio(persona);
   const value = raw ? baseValue : baseValue * DEFAULT_VOLCENGINE_SPEED_BUMP;
   return Number.isFinite(value) && value > 0 ? value : 1;
 }

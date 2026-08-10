@@ -41,6 +41,22 @@ function asPersonas(value: unknown): PersonaId[] {
   return seen.size >= 2 ? [...seen] : DEFAULT_PERSONAS;
 }
 
+function toInitErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "创建圆桌失败，请稍后重试。";
+  }
+
+  if (error.message.includes("Missing Supabase environment variables")) {
+    return "Vercel 环境缺少 Supabase 变量，无法创建圆桌。";
+  }
+
+  if (error.message.includes("Database insert failed")) {
+    return "Supabase sessions 表写入失败，请检查表结构和 RLS 配置。";
+  }
+
+  return error.message || "创建圆桌失败，请稍后重试。";
+}
+
 export async function POST(request: Request) {
   let body: InitSessionBody;
 
@@ -61,7 +77,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[sessions:init] Failed to create session", error);
     return Response.json(
-      { error: "创建圆桌失败，请稍后重试。" },
+      { error: toInitErrorMessage(error) },
       { status: 503 },
     );
   }

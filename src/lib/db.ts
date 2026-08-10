@@ -13,7 +13,9 @@ export async function dbCreateSession(session: Session): Promise<boolean> {
     created_at: session.createdAt,
   });
 
-  if (error) throw error;
+  if (error) {
+    throw new Error(`Database insert failed: ${error.message}`);
+  }
   return true;
 }
 

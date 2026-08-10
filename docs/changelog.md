@@ -6,6 +6,9 @@
 
 ## Unreleased
 
+- 同步圆桌页文字推进与 TTS 语速：前端逐字显示现在读取同一份人格语速配置，回放和直播的文字节拍不再固定使用统一常量。
+- 修复首页点击「开始」时错误只显示原始 JSON 的问题：`/api/sessions/init` 现在会透出 Supabase / 环境变量 / 写入失败的具体原因，首页也会正确解析接口返回并显示可读错误。
+- 修复 `douyin-interactive-space/` H5 趣玩模式递纸条可能误结束的问题：递纸条热区优先于底部结束按钮命中；递纸条后的普通续写强制越过 12 条上限，并在续写接口失败时追加本地兜底发言，避免对话直接进入结束态。
 - 修复 `douyin-interactive-space/` H5 手机端 TTS 可能静默的问题：在用户触摸/点击时对实际播放 TTS 的 WebAudio context 执行静音 buffer 解锁，并在播放前确保 context 尝试恢复运行。
 - 调整 `douyin-interactive-space/` H5 分享视频录制格式：MediaRecorder 优先尝试 `video/mp4`/H.264，只有环境不支持时才退回 WebM，并在 WebM 情况下提示手机可能无法保存到本地。
 - 修复 `douyin-interactive-space/` H5 分享视频重复触发的问题：为 Web Share 增加分享中锁和按钮状态，分享面板打开期间不再重复调用 `navigator.share()`，并将 `share() is already in progress` 转成友好提示。

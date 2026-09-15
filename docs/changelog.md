@@ -6,6 +6,7 @@
 
 ## Unreleased
 
+- 临时透出 session 初始化的 Supabase 写入错误详情，便于线上诊断表结构、权限和约束问题。
 - 将 Supabase 配置统一改为服务端环境变量 `SUPABASE_URL`、`SUPABASE_ANON_KEY` 和 `SUPABASE_SERVICE_ROLE_KEY`，移除未使用的浏览器 Supabase 客户端，避免将数据库配置注入前端构建产物。
 - 同步圆桌页文字推进与 TTS 语速：前端逐字显示现在读取同一份人格语速配置，回放和直播的文字节拍不再固定使用统一常量。
 - 修复首页点击「开始」时错误只显示原始 JSON 的问题：`/api/sessions/init` 现在会透出 Supabase / 环境变量 / 写入失败的具体原因，首页也会正确解析接口返回并显示可读错误。

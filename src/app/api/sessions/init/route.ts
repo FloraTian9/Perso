@@ -51,7 +51,7 @@ function toInitErrorMessage(error: unknown): string {
   }
 
   if (error.message.includes("Database insert failed")) {
-    return "Supabase sessions 表写入失败，请检查表结构和 RLS 配置。";
+    return `Supabase sessions 表写入失败：${error.message.replace("Database insert failed: ", "")}`;
   }
 
   return error.message || "创建圆桌失败，请稍后重试。";

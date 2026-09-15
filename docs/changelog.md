@@ -6,7 +6,7 @@
 
 ## Unreleased
 
-- 将 Supabase anon key 环境变量从 `NEXT_PUBLIC_SUPABASE_ANON_KEY` 改为仅服务端读取的 `SUPABASE_ANON_KEY`，并移除未使用的浏览器 Supabase 客户端，避免将 anon key 注入前端构建产物。
+- 将 Supabase 配置统一改为服务端环境变量 `SUPABASE_URL`、`SUPABASE_ANON_KEY` 和 `SUPABASE_SERVICE_ROLE_KEY`，移除未使用的浏览器 Supabase 客户端，避免将数据库配置注入前端构建产物。
 - 同步圆桌页文字推进与 TTS 语速：前端逐字显示现在读取同一份人格语速配置，回放和直播的文字节拍不再固定使用统一常量。
 - 修复首页点击「开始」时错误只显示原始 JSON 的问题：`/api/sessions/init` 现在会透出 Supabase / 环境变量 / 写入失败的具体原因，首页也会正确解析接口返回并显示可读错误。
 - 修复 `douyin-interactive-space/` H5 趣玩模式递纸条可能误结束的问题：递纸条热区优先于底部结束按钮命中；递纸条后的普通续写强制越过 12 条上限，并在续写接口失败时追加本地兜底发言，避免对话直接进入结束态。

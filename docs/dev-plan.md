@@ -76,7 +76,7 @@ src/
 ### 环境变量
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_URL=
 SUPABASE_ANON_KEY=            # 仅服务端使用，不得暴露给前端
 SUPABASE_SERVICE_ROLE_KEY=    # 仅服务端使用，不得暴露给前端
 QWEN_API_KEY=

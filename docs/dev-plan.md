@@ -67,7 +67,7 @@ src/
 - [x] 初始化根目录 Next.js 项目，确认 App Router + TypeScript + Tailwind
 - [x] 新增 `.env.example`，列出 `.env.local` 需要填写的环境变量（本地密钥不提交）
 - [x] `src/lib/qwen.ts` — Qwen streaming wrapper
-- [x] `src/lib/supabase.ts` — Supabase 客户端（browser + server 两个实例）
+- [x] `src/lib/supabase.ts` — Supabase 服务端客户端
 - [x] `src/app/api/chat/route.ts` — 接收 `{topic, personas, mode, messages}`，服务端构建 system prompt 后调用 Qwen，返回流式响应；**不接受**客户端传入 prompt 字符串；入参做 persona 白名单校验 + 敏感话题服务端过滤
 - [ ] `src/app/api/sessions/init/route.ts` — 创建 session 记录，返回 `session_id`（M5 详细展开）
 - [x] `src/types/index.ts` — 基础类型（`Persona`, `Message`, `Session`, `Mode`）
@@ -77,7 +77,7 @@ src/
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_ANON_KEY=            # 仅服务端使用，不得暴露给前端
 SUPABASE_SERVICE_ROLE_KEY=    # 仅服务端使用，不得暴露给前端
 QWEN_API_KEY=
 ```
@@ -424,7 +424,7 @@ alter table messages enable row level security;
 -- 确认服务端使用 SUPABASE_SERVICE_ROLE_KEY（不暴露给前端）
 ```
 
-**写入路径：** 所有数据库写入只通过服务端 API 路由（使用 `SUPABASE_SERVICE_ROLE_KEY`）。前端只持有 `NEXT_PUBLIC_SUPABASE_ANON_KEY`，RLS 关闭后 anon 无法直接读写任何表。
+**写入路径：** 所有数据库访问只通过服务端 API 路由。服务端优先使用 `SUPABASE_SERVICE_ROLE_KEY`，`SUPABASE_ANON_KEY` 仅作无 service-role key 时的连接兜底；两者都不暴露给前端。RLS 启用且不配置 anon policy 时，anon 无法读写任何表。
 
 **隐私约束（对应 PRD 6.3）：** topic 字段存储用户输入原文，属于潜在隐私数据；v1 不对外暴露查询接口，不共享数据，仅用于产品迭代分析。
 
